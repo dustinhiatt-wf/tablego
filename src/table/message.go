@@ -7,9 +7,36 @@
  */
 package table
 
+import (
+	"time"
+)
+
 type valuemessage struct {
 	operation 	string
 	cell		*cell
+	table		*table
+	tableRange	*tablerange
+	valueRange	*valuerange
+	messageId	string
+	timestamp	int
+}
+
+func MakeValueMessage(operation, messageId string, cell *cell, vr *valuerange, tr *tablerange, table *table) *valuemessage {
+	vm := new(valuemessage)
+	vm.operation = operation
+	vm.messageId = messageId
+	vm.cell = cell
+	vm.table = table
+	vm.tableRange = tr
+	vm.valueRange = vr
+	vm.timestamp = time.Now().Nanosecond()
+	return vm
+}
+
+func (vm *valuemessage) Copy() *valuemessage {
+	copy := new(valuemessage)
+	*copy = *vm
+	return copy
 }
 
 type tablemessage struct {
@@ -18,8 +45,4 @@ type tablemessage struct {
 
 func MakeValueChannel() chan *valuemessage {
 	return make(chan *valuemessage)
-}
-
-func MakeTableChannel() chan *tablemessage {
-	return make(chan *tablemessage, 1)
 }

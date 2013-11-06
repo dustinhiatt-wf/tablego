@@ -64,10 +64,22 @@ func getStringPartsFromAlphaNumeric(alpha string) []string {
 	return re.FindAllString(alpha, -1)
 }
 
+/*
+TODO: this can be cleaned up and duplicates subscribe code
+ */
 func sum(c *cell, args string) (*cellrange, string) {
 	cr := MakeRange(args)
-
-	tr := c.table.GetRangeByCellRange(cr)
+	ch := MakeValueChannel()
+	if cr.tableId == "" || cr.tableId == c.table.id {
+		c.table.GetRangeByCellRange(cr, ch)
+	} else {
+		tableCh := MakeValueChannel()
+		c.table.orchestrator.GetTableById(cr.tableId, tableCh)
+		tableMessage := <- tableCh
+		tableMessage.table.GetRangeByCellRange(cr, ch)
+	}
+	message := <- ch
+	tr := message.tableRange
 	sum := 0.0
 	for i := cr.startRow; i < cr.stopRow; i++ {
 		_, ok := tr.cells[i]

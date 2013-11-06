@@ -68,7 +68,7 @@ func (c *cell) SetValue(value string) {
 		initialize(c)
 	}
 	if !c.isFormula {
-		go c.subscribers.notifySubscribers(&valuemessage{"updated", c})
+		go c.subscribers.notifySubscribers(MakeValueMessage(Updated, "", c, nil, nil, nil), false)
 	}
 }
 
@@ -97,12 +97,33 @@ func listen(c *cell, ch <- chan *valuemessage) {
 	}
 }
 
+/*
+TODO: This needs to be cleaned up to make these calls parallel
+ */
 func subscribeToRange(c *cell, cr *cellrange) {
 	unsubscribeObservers(c)
+	ch := MakeValueChannel()
+	if cr.tableId == "" || cr.tableId == c.table.id {
+		c.table.GetRangeByCellRange(cr, ch)
+	} else {
+		tableCh := MakeValueChannel()
+		c.table.orchestrator.GetTableById(cr.tableId, tableCh)
+		tableMessage := <- tableCh
+		tableMessage.table.GetRangeByCellRange(cr, ch)
+	}
+	message := <- ch
+	tr := message.tableRange
 	for i := cr.startRow; i < cr.stopRow; i++ {
 		for j := cr.startColumn; j < cr.stopColumn; j++ {
+			cell, ok := tr.cells[i][j]
+			if !ok {
+				ch = MakeValueChannel()
+				c.table.EditTableValue(i, j, "", ch)
+				message := <- ch
+				cell = message.cell
+			}
 			ch := MakeValueChannel()
-			c.table.Subscribe(i, j, ch)
+			cell.Subscribe(ch)
 			c.observers = append(c.observers, ch)
 			go listen(c, ch)
 		}
@@ -111,8 +132,9 @@ func subscribeToRange(c *cell, cr *cellrange) {
 
 func unsubscribeObservers(c *cell) {
 	for _, ch := range c.observers {
-		ch <- &valuemessage{"unsubscribe", nil}
-		close(ch)
+		go func () {
+			ch <- MakeValueMessage(Unsubscribe, "", nil, nil, nil, nil)
+		}()
 	}
 	c.observers = make([]chan *valuemessage, 0)
 }
@@ -127,12 +149,12 @@ func calculate(c *cell) *cellrange {
 	}
 	if value != c.DisplayValue {
 		c.DisplayValue = value
-		go c.subscribers.notifySubscribers(&valuemessage{"updated", c})
+		go c.subscribers.notifySubscribers(MakeValueMessage(Updated, "", c, nil, nil, nil), false)
 	}
 	return cr
 }
 
-func listenToTable(c *cell) {
+func listenToParent(c *cell) {
 	for {
 		select {
 		case message := <- c.table.tablechannel:
@@ -170,11 +192,10 @@ func MakeCell(row int, column int, value string, table *table, listener chan *va
 	cell.observers = make([]chan *valuemessage, 0)
 	cell.SetValue(value)
 	if table != nil {
-		go listenToTable(cell)
+		go listenToParent(cell)
 		if table.isinitialized {
 			initialize(cell)
 		}
 	}
 	return cell
 }
-

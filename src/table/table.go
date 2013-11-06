@@ -12,14 +12,15 @@ import (
 )
 
 type table struct {
-	id				string
-	cells			map[int]map[int]*cell
-	rows			map[int]chan *valuemessage
-	columns			map[int]chan *valuemessage
-	isinitialized	bool
-	tablechannel	chan *tablemessage
-	subscribers		*subscribers
-	orchestrator	*orchestrator
+	id						string
+	cells					map[int]map[int]*cell
+	rows					map[int]chan *valuemessage
+	columns					map[int]chan *valuemessage
+	isinitialized			bool
+	tablechannel			chan *valuemessage
+	subscribers				*subscribers
+	orchestrator			*orchestrator
+	orchestratorChannel 	chan *valuemessage
 }
 
 /*
@@ -29,7 +30,7 @@ func listenToCells(t *table, ch chan *valuemessage) {
 	for {
 		select {
 		case message := <- ch:
-			t.subscribers.notifySubscribers(message)
+			t.subscribers.notifySubscribers(message, false)
 		}
 	}
 }
@@ -49,19 +50,36 @@ func tableHasCell(table *table, row, column int) bool {
 	return getCell(table, row, column) != nil
 }
 
-func MakeTable(id string, orchestrator *orchestrator) *table {
+func listenToOrchestrator(t *table) {
+	for {
+		select {
+		case message := <- t.orchestratorChannel:
+			switch message.operation {
+			case "getTable":
+				t.orchestratorChannel <- MakeValueMessage(GetTable, "", nil, nil, nil, t)
+			}
+		}
+	}
+}
+
+func MakeTable(id string, orchestrator *orchestrator, ch chan *valuemessage) *table {
 	table := new(table)
 	table.id = id
 	cells := make(map[int]map[int]*cell)
 	table.cells = cells
-	table.tablechannel = MakeTableChannel()
+	table.tablechannel = MakeValueChannel()
 	table.subscribers = MakeSubscribers()
 	table.orchestrator = orchestrator
 	table.isinitialized = true
+	table.orchestratorChannel = ch
+	go func () {
+		ch <- MakeValueMessage("tableOpened", "", nil, nil, nil, table)
+	}()
+	go listenToOrchestrator(table)
 	return table
 }
 
-func (t *table) EditTableValue(row, column int, value string) *cell {
+func (t *table) EditTableValue(row, column int, value string, ch chan *valuemessage) {
 	row_item, ok := t.cells[row]
 	if ok {
 		cell, ok := row_item[column]
@@ -80,32 +98,30 @@ func (t *table) EditTableValue(row, column int, value string) *cell {
 		cell := MakeCell(row, column, value, t, ch)
 		t.cells[row][column] = cell
 	}
-	return t.cells[row][column]
+	go func () {
+		ch <- MakeValueMessage(EditCell, "", t.cells[row][column], nil, nil, nil)
+	}()
 }
 
-func (t *table) Subscribe(row, column int, ch chan *valuemessage) {
-	cell := getCell(t, row, column)
-	if cell != nil {
-		cell.Subscribe(ch)
-		return
-	}
-	cell = t.EditTableValue(row, column, "")
-	cell.Subscribe(ch)
-}
-
-func (t *table) SubscribeToTable(ch chan *valuemessage) {
+func (t *table) Subscribe(ch chan *valuemessage) {
 	t.subscribers.append(ch)
 }
 
-func (t *table) GetValueAt(row, column int) *cell {
-	return getCell(t, row, column)
+func (t *table) GetValueAt(row, column int, ch chan *valuemessage) {
+	cell := getCell(t, row, column)
+	go func () {
+		ch <- MakeValueMessage(GetValueAt, "", cell, nil, nil, nil)
+	}()
 }
 
-func (t *table) GetRangeByRowAndColumn(startRow, stopRow, startColumn, stopColumn int) *tablerange {
+func (t *table) GetRangeByRowAndColumn(startRow, stopRow, startColumn, stopColumn int, ch chan *valuemessage) {
 	cr := &cellrange{startRow, stopRow + 1, startColumn, stopColumn + 1, t.id}
-	return t.GetRangeByCellRange(cr)
+	t.GetRangeByCellRange(cr, ch)
 }
 
-func (t *table) GetRangeByCellRange(cr *cellrange) *tablerange {
-	return MakeTableRange(t.cells, cr)
+func (t *table) GetRangeByCellRange(cr *cellrange, ch chan *valuemessage) {
+	tr := MakeTableRange(t.cells, cr)
+	go func () {
+		ch <- MakeValueMessage(GetCellRange, "", nil, nil, tr, nil)
+	}()
 }

@@ -20,6 +20,10 @@ func (s *subscribers) isSubscriberInList(ch chan *valuemessage) bool {
 	return false
 }
 
+func (s *subscribers) clear() {
+	s.subscribers = make([]chan *valuemessage, 0)
+}
+
 func (s *subscribers) remove(ch chan *valuemessage) {
 	if !s.isSubscriberInList(ch) {
 		return
@@ -49,13 +53,17 @@ func internalNotify(s *subscribers, ch chan *valuemessage, message *valuemessage
 	ch <- message
 }
 
-func (s *subscribers) notifySubscribers(message *valuemessage) {
+func (s *subscribers) notifySubscribers(message *valuemessage, clear bool) {
 	if len(s.subscribers) == 0 {
 		return
 	}
 
 	for _, ch := range s.subscribers {
-		internalNotify(s, ch, message)
+		go internalNotify(s, ch, message)
+	}
+
+	if clear {
+		s.clear()
 	}
 }
 

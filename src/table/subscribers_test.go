@@ -52,7 +52,7 @@ This would deadlock if a message was sent
  */
 func TestNotifyEmptySubscribers(t *testing.T) {
 	s := MakeSubscribers()
-	s.notifySubscribers(&valuemessage{"update", new(cell)})
+	s.notifySubscribers(MakeValueMessage(Updated, "", new(cell), nil, nil, nil), false)
 }
 
 /*
@@ -62,17 +62,20 @@ func TestNotifySubscriber(t *testing.T) {
 	s := MakeSubscribers()
 	ch := MakeValueChannel()
 	s.append(ch)
-	go s.notifySubscribers(&valuemessage{"update", new(cell)})
+	go s.notifySubscribers(MakeValueMessage(Updated, "", new(cell), nil, nil, nil), false)
 	<- ch
 }
 
 func TestNotifyClosedChannel(t *testing.T) {
 	s := MakeSubscribers()
 	ch := MakeValueChannel()
+	chTwo := MakeValueChannel()
 	s.append(ch)
+	s.append(chTwo)
 	close(ch)
-	s.notifySubscribers(&valuemessage{"update", new(cell)})
-	if len(s.subscribers) != 0 {
+	s.notifySubscribers(MakeValueMessage(Updated, "", new(cell), nil, nil, nil), false)
+	<- chTwo
+	if len(s.subscribers) != 1 {
 		t.Error("Exception did not remove subscriber.")
 	}
 }
