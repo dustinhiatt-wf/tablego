@@ -7,24 +7,39 @@
  */
 package table
 
+import (
+	"encoding/json"
+	"strconv"
+)
+
 type tablerange struct {
-	cells 	 	map[int]map[int]*cell
+	cells 	 	map[int]map[int]ICell
 }
 
 type valuerange struct {
-	values 		map[int]map[int]string
+	ISerializable
+	Values 		map[string]map[string]string
 }
 
-func MakeTableRange(cells map[int]map[int]*cell, cr *cellrange) *tablerange {
+func (vr *valuerange) ToBytes() []byte {
+	res, err := json.Marshal(vr)
+	if err != nil {
+		return nil
+	}
+
+	return res
+}
+
+func MakeTableRange(cells map[int]map[int]ICell, cr *cellrange) *tablerange {
 	tb := new(tablerange)
-	tb.cells = make(map[int]map[int]*cell)
-	for i := cr.startRow; i < cr.stopRow; i++ {
+	tb.cells = make(map[int]map[int]ICell)
+	for i := cr.StartRow; i < cr.StopRow; i++ {
 		row, ok := cells[i]
 		if !ok {
 			continue
 		}
-		tb.cells[i] = make(map[int]*cell)
-		for j := cr.startColumn; j < cr.stopColumn; j++ {
+		tb.cells[i] = make(map[int]ICell)
+		for j := cr.StartColumn; j < cr.StopColumn; j++ {
 			cell, ok := row[j]
 			if ok {
 				tb.cells[i][j] = cell
@@ -34,21 +49,47 @@ func MakeTableRange(cells map[int]map[int]*cell, cr *cellrange) *tablerange {
 	return tb
 }
 
-func MakeValueRange(cells map[int]map[int]*cell, cr *cellrange) *valuerange {
+func MakeValueRange(cells map[int]map[int]ICell, cr *cellrange) *valuerange {
 	vr := new(valuerange)
-	vr.values = make(map[int]map[int]string)
-	for i := cr.startRow; i < cr.stopRow; i++ {
+	vr.Values = make(map[string]map[string]string)
+	for i := cr.StartRow; i < cr.StopRow; i++ {
 		row, ok := cells[i]
 		if !ok {
 			continue
 		}
-		vr.values[i] = make(map[int]string)
-		for j := cr.startColumn; j < cr.stopColumn; j++ {
+		vr.Values[strconv.Itoa(i)] = make(map[string]string)
+		for j := cr.StartColumn; j < cr.StopColumn; j++ {
 			cell, ok := row[j]
 			if ok {
-				vr.values[i][j] = cell.DisplayValue
+
+				vr.Values[strconv.Itoa(i)][strconv.Itoa(j)] = cell.DisplayValue()
 			}
 		}
 	}
 	return vr
+}
+
+func MakeValueRangeFromBytes(bytes []byte) *valuerange {
+	var m valuerange
+	err := json.Unmarshal(bytes, &m)
+	if err != nil {
+		return nil
+	}
+	return &m
+}
+
+func ConvertStringKeyedMapToIntKeys(stringKeyed map[string]map[string]ICell) map[int]map[int]ICell {
+	intKeyed := make(map[int]map[int]ICell)
+	for row := range stringKeyed {
+		for column := range stringKeyed[row] {
+			intRow, _ := strconv.Atoi(row)
+			_, ok := intKeyed[intRow]
+			if !ok {
+				intKeyed[intRow] = make(map[int]ICell)
+			}
+			intColumn, _ := strconv.Atoi(column)
+			intKeyed[intRow][intColumn] = stringKeyed[row][column]
+		}
+	}
+	return intKeyed
 }

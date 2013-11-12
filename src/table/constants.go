@@ -11,10 +11,14 @@ const (
 	GetTable string 	= "getTable"
 	TableOpened			= "tableOpened"
 	TableClosed			= "tableClosed"
-	EditCell			= "editCell"
-	Updated				= "updated"
+	EditCellValue		= "editCellValue"
+	CellUpdated			= "cellUpdated"
 	Unsubscribe			= "unsubscribe"
 	GetValueAt			= "getValueAt"
-	GetCellRange		= "getCellRange"
+	GetValueRange		= "getValueRange"
+	CloseTable			= "closeTable"
+	CellOpened			= "cellOpened"
+	GetCellValue		= "getCellValue"
+	Subscribe			= "subscribe"
 )
 

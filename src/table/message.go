@@ -7,42 +7,146 @@
  */
 package table
 
-import (
-	"time"
-)
-
-type valuemessage struct {
-	operation 	string
-	cell		*cell
-	table		*table
-	tableRange	*tablerange
-	valueRange	*valuerange
-	messageId	string
-	timestamp	int
+type ISerializable interface {
+	ToBytes()	[]byte
 }
 
-func MakeValueMessage(operation, messageId string, cell *cell, vr *valuerange, tr *tablerange, table *table) *valuemessage {
-	vm := new(valuemessage)
-	vm.operation = operation
-	vm.messageId = messageId
-	vm.cell = cell
-	vm.table = table
-	vm.tableRange = tr
-	vm.valueRange = vr
-	vm.timestamp = time.Now().Nanosecond()
-	return vm
+type ICellLocation interface {
+	Row()		int
+	Column()	int
 }
 
-func (vm *valuemessage) Copy() *valuemessage {
-	copy := new(valuemessage)
-	*copy = *vm
-	return copy
+type cellLocation struct {
+	cellRow			int
+	cellColumn		int
 }
 
-type tablemessage struct {
-	operation	string
+func (cl *cellLocation) Row() int {
+	return cl.cellRow
 }
 
-func MakeValueChannel() chan *valuemessage {
-	return make(chan *valuemessage)
+func (cl *cellLocation) Column() int {
+	return cl.cellColumn
+}
+
+func MakeCellLocation(row, column int) ICellLocation {
+	cl := &cellLocation{row, column}
+	return cl
+}
+
+type IMessage interface {
+	SourceTable()			string
+	SourceCell()			ICellLocation
+	TargetTable()			string
+	TargetCell()			ICellLocation
+	Operation()				string
+	Payload()				[]byte
+	MessageId()				string
+	Error()					string
+	Equal(msg IMessage) 	bool
+}
+
+type message struct {
+	sourceTable		string
+	sourceCell		ICellLocation
+	targetTable		string
+	targetCell		ICellLocation
+	operation		string
+	payload			[]byte
+	messageId		string
+	error			string
+}
+
+func (m *message) Operation() string {
+	return m.operation
+}
+
+func (m *message) Payload() []byte {
+	return m.payload
+}
+
+func (m *message) SourceTable() string {
+	return m.sourceTable
+}
+
+func (m *message) SourceCell() ICellLocation {
+	return m.sourceCell
+}
+
+func (m *message) TargetTable() string {
+	return m.targetTable
+}
+
+func (m *message) TargetCell() ICellLocation {
+	return m.targetCell
+}
+
+func (m *message) MessageId() string {
+	return m.messageId
+}
+
+func (m *message) Error() string {
+	return m.error
+}
+
+func (m *message) Equal(msg IMessage) bool {
+	if msg.TargetCell().Row() == m.TargetCell().Row() &&
+	   msg.TargetCell().Column() == m.TargetCell().Column() &&
+	   msg.SourceCell().Row() == m.SourceCell().Row() &&
+	   msg.SourceCell().Column() == m.SourceCell().Column() &&
+	   msg.TargetTable() == m.TargetTable() &&
+	   msg.SourceTable() == m.SourceTable() {
+		return true
+	}
+	return false
+}
+
+type ICommand interface {
+	IMessage
+}
+
+type command struct {
+	message
+}
+
+func MakeCommand(operation, targetTable, sourceTable string, targetCell, sourceCell ICellLocation, payload []byte) *command {
+	message := new(command)
+	message.operation = operation
+	message.payload = payload
+	message.targetCell = targetCell
+	message.targetTable = targetTable
+	message.sourceCell = sourceCell
+	message.sourceTable = sourceTable
+	message.messageId = GenUUID()
+	return message
+}
+
+type IResponse interface {
+	IMessage
+}
+
+type response struct {
+	message
+}
+
+func MakeResponse(command ICommand, payload []byte) *response {
+	response := new(response)
+	response.payload = payload
+	response.targetCell = command.SourceCell()
+	response.targetTable = command.SourceTable()
+	response.sourceCell = command.TargetCell()
+	response.sourceTable = command.TargetTable()
+	response.messageId = command.MessageId()
+	response.operation = command.Operation()
+	return response
+}
+
+func MakeMessageChannel() chan IMessage {
+	return make(chan IMessage)
+}
+
+func MakeError(command ICommand, error string) IMessage {
+	response := MakeResponse(command, nil)
+	response.error = error
+	return response
 }

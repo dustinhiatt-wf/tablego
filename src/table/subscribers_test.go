@@ -13,20 +13,20 @@ import (
 
 func TestIsSubscriberInSubscribers(t *testing.T) {
 	s := MakeSubscribers()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	s.subscribers = append(s.subscribers, ch)
 	if !s.isSubscriberInList(ch) {
 		t.Error("Subscriber is actually in list.")
 	}
 
-	if s.isSubscriberInList(MakeValueChannel()) {
+	if s.isSubscriberInList(MakeMessageChannel()) {
 		t.Error("Subscriber is not in list.")
 	}
 }
 
 func TestAppendSubscriber(t *testing.T) {
 	s := MakeSubscribers()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	s.append(ch)
 	if len(s.subscribers) != 1 {
 		t.Error("Channel not appended properly")
@@ -39,7 +39,7 @@ func TestAppendSubscriber(t *testing.T) {
 
 func TestRemoveSubscriber(t *testing.T) {
 	s := MakeSubscribers()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	s.append(ch)
 	s.remove(ch)
 	if len(s.subscribers) != 0 {
@@ -52,7 +52,7 @@ This would deadlock if a message was sent
  */
 func TestNotifyEmptySubscribers(t *testing.T) {
 	s := MakeSubscribers()
-	s.notifySubscribers(MakeValueMessage(Updated, "", new(cell), nil, nil, nil), false)
+	s.notifySubscribers(MakeCommand(CellUpdated, "", "", nil, nil, nil), false)
 }
 
 /*
@@ -60,20 +60,20 @@ This would deadlock if a message was not sent
  */
 func TestNotifySubscriber(t *testing.T) {
 	s := MakeSubscribers()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	s.append(ch)
-	go s.notifySubscribers(MakeValueMessage(Updated, "", new(cell), nil, nil, nil), false)
+	go s.notifySubscribers(MakeCommand(CellUpdated, "", "", nil, nil, nil), false)
 	<- ch
 }
 
 func TestNotifyClosedChannel(t *testing.T) {
 	s := MakeSubscribers()
-	ch := MakeValueChannel()
-	chTwo := MakeValueChannel()
+	ch := MakeMessageChannel()
+	chTwo := MakeMessageChannel()
 	s.append(ch)
 	s.append(chTwo)
 	close(ch)
-	s.notifySubscribers(MakeValueMessage(Updated, "", new(cell), nil, nil, nil), false)
+	s.notifySubscribers(MakeCommand(CellUpdated, "", "", nil, nil, nil), false)
 	<- chTwo
 	if len(s.subscribers) != 1 {
 		t.Error("Exception did not remove subscriber.")

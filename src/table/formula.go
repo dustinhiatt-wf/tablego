@@ -13,15 +13,57 @@ import (
 	"strings"
 	"unicode/utf8"
 	"math"
+	"encoding/json"
 //	"log"
 )
 
+const (
+	letters = "ABCDEFGHIJKLMONQRSTUVWXYZ"
+)
+
 type cellrange struct {
-	startRow		int
-	stopRow			int
-	startColumn		int
-	stopColumn		int
-	tableId			string
+	ISerializable
+	StartRow		int
+	StopRow			int
+	StartColumn		int
+	StopColumn		int
+	TableId			string
+}
+
+func (cr *cellrange) ToBytes() []byte {
+	res, err := json.Marshal(cr)
+	if err != nil {
+		return nil
+	}
+
+	return res
+}
+
+func MakeRange(xrange string) *cellrange {
+	cr := new(cellrange)
+	rangeParts := strings.Split(xrange, ":")
+	if len(rangeParts) == 3 {
+		cr.TableId = rangeParts[0]
+		rangeParts = rangeParts[1:]
+	}
+	startParts := getStringPartsFromAlphaNumeric(rangeParts[0])
+	startRow, startColumn := parseAlphaNumericParts(startParts)
+	stopParts := getStringPartsFromAlphaNumeric(rangeParts[1])
+	stopRow, stopColumn := parseAlphaNumericParts(stopParts)
+	cr.StartRow = startRow
+	cr.StartColumn = startColumn
+	cr.StopRow = stopRow + 1
+	cr.StopColumn = stopColumn + 1
+	return cr
+}
+
+func MakeRangeFromBytes(bytes []byte) *cellrange {
+	var m cellrange
+	err := json.Unmarshal(bytes, &m)
+	if err != nil {
+		return nil
+	}
+	return &m
 }
 
 func parseFormula(value string) []string {
@@ -65,18 +107,16 @@ func getStringPartsFromAlphaNumeric(alpha string) []string {
 }
 
 /*
-TODO: this can be cleaned up and duplicates subscribe code
- */
 func sum(c *cell, args string) (*cellrange, string) {
 	cr := MakeRange(args)
 	ch := MakeValueChannel()
 	if cr.tableId == "" || cr.tableId == c.table.id {
 		c.table.GetRangeByCellRange(cr, ch)
 	} else {
-		tableCh := MakeValueChannel()
-		c.table.orchestrator.GetTableById(cr.tableId, tableCh)
-		tableMessage := <- tableCh
-		tableMessage.table.GetRangeByCellRange(cr, ch)
+		//tableCh := MakeValueChannel()
+		//c.table.orchestrator.GetTableById(cr.tableId, tableCh)
+		//tableMessage := <- tableCh
+		//tableMessage.table.GetRangeByCellRange(cr, ch)
 	}
 	message := <- ch
 	tr := message.tableRange
@@ -103,22 +143,4 @@ func sum(c *cell, args string) (*cellrange, string) {
 	}
 	value := strconv.FormatFloat(sum, 'f', -1, 64)
 	return cr, value
-}
-
-func MakeRange(xrange string) *cellrange {
-	cr := new(cellrange)
-	rangeParts := strings.Split(xrange, ":")
-	if len(rangeParts) == 3 {
-		cr.tableId = rangeParts[0]
-		rangeParts = rangeParts[1:]
-	}
-	startParts := getStringPartsFromAlphaNumeric(rangeParts[0])
-	startRow, startColumn := parseAlphaNumericParts(startParts)
-	stopParts := getStringPartsFromAlphaNumeric(rangeParts[1])
-	stopRow, stopColumn := parseAlphaNumericParts(stopParts)
-	cr.startRow = startRow
-	cr.startColumn = startColumn
-	cr.stopRow = stopRow + 1
-	cr.stopColumn = stopColumn + 1
-	return cr
-}
+}*/

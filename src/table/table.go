@@ -7,9 +7,18 @@
  */
 package table
 
+
 import (
-	//"log"
+	"strconv"
 )
+
+/*
+type ITable interface {
+	EditTableValue(row, column int, value string, ch chan *valuemessage)
+	GetValueAt(row, column int, ch chan *valuemessage)
+	GetRangeByRowAndColumn(startRow, stopRow, startColumn, stopColumn int, ch chan *valuemessage)
+	GetRangeByCellRange(cr *cellrange, ch chan *valuemessage)
+}
 
 type table struct {
 	id						string
@@ -24,8 +33,24 @@ type table struct {
 }
 
 /*
+The idea here is that if you call into a channel to get a table message back
+what you actually get back is something that resembles a table but is actually
+just forwarding your commands and data to where the table actually lives
+
+type tableobservable struct {
+	channelToTable			chan *valuemessage
+}
+
+func MakeTableObservable(channelToTable chan *valuemessage) *tableobservable {
+	to := new(tableobservable)
+	to.channelToTable = channelToTable
+	return to
+}
+
+
+/*
 Listens for cell changes and notifies anyone listening to the table
- */
+
 func listenToCells(t *table, ch chan *valuemessage) {
 	for {
 		select {
@@ -57,6 +82,8 @@ func listenToOrchestrator(t *table) {
 			switch message.operation {
 			case "getTable":
 				t.orchestratorChannel <- MakeValueMessage(GetTable, "", nil, nil, nil, t)
+			case EditTableValue:
+
 			}
 		}
 	}
@@ -124,4 +151,203 @@ func (t *table) GetRangeByCellRange(cr *cellrange, ch chan *valuemessage) {
 	go func () {
 		ch <- MakeValueMessage(GetCellRange, "", nil, nil, tr, nil)
 	}()
+}
+*/
+
+type table struct {
+	tableId			string
+	orchestrator	*tableorchestratorchannel
+	subscribers		*subscribers
+	cells			map[int]map[int]*cellChannel
+}
+
+type cellChannel struct {
+	channel				*tableCellChannel
+	pendingRequests		map[string]*subscribers
+	cellInitialized		bool
+}
+
+func (cc *cellChannel) sendNotification(operation string, message IMessage) {
+	subs, ok := cc.pendingRequests[operation]
+	if ok {
+		subs.notifySubscribers(message, true)
+	}
+}
+
+func (cc *cellChannel) subscribe(operation string, ch chan IMessage) {
+	subs, ok := cc.pendingRequests[operation]
+	if !ok {
+		cc.pendingRequests[operation] = MakeSubscribers()
+		subs = cc.pendingRequests[operation]
+	}
+	subs.append(ch)
+}
+
+func MakeCellChannel() *cellChannel {
+	cc := new(cellChannel)
+	cc.channel = MakeTableCellChannel()
+	cc.pendingRequests = make(map[string]*subscribers)
+	cc.cellInitialized = false
+	return cc
+}
+
+type tableCellChannel struct {
+	tableToCell		chan IMessage
+	cellToTable		chan IMessage
+}
+
+func MakeTableCellChannel() *tableCellChannel {
+	ch := new(tableCellChannel)
+	ch.tableToCell = MakeMessageChannel()
+	ch.cellToTable = MakeMessageChannel()
+	return ch
+}
+
+func (t *table) getCellByPosition(row, column int, client chan IMessage) {
+	_, ok := t.cells[row]
+	if !ok {
+		t.cells[row] = make(map[int]*cellChannel)
+	}
+	cc, ok := t.cells[row][column]
+	if !ok {
+		go t.createCell(row, column, "",  client)
+	} else if !cc.cellInitialized { //currently being loaded
+		cc.subscribe(CellOpened, client)
+	} else { // table is loaded and ready
+		go func () {
+			client <- MakeCommand(CellOpened, t.tableId, "", MakeCellLocation(row, column), nil, nil)
+		}()
+	}
+}
+
+func (t *table) createCell(row, column int, value string, client chan IMessage) {
+	cc := MakeCellChannel()
+	_, ok := t.cells[row]
+	if !ok {
+		t.cells[row] = make(map[int]*cellChannel)
+	}
+
+	t.cells[row][column] = cc
+	t.cells[row][column].subscribe(CellOpened, client)
+	go t.listenToCell(cc)
+	MakeCell(row, column, value, cc)
+}
+
+func (t *table) sendToCell(cc *cellChannel, msg IMessage, ch chan IMessage) {
+	cc.subscribe(msg.MessageId(), ch)
+	cc.channel.tableToCell <- msg
+}
+
+func (t *table) listenToCell(cc *cellChannel) {
+	for {
+		select {
+		case message := <- cc.channel.cellToTable:
+			switch message.Operation() {
+			case CellOpened:
+				cc.cellInitialized = true
+				go cc.sendNotification(CellOpened, message)
+			default:
+				go cc.sendNotification(message.MessageId(), message)
+			}
+		}
+	}
+}
+
+func (t *table) getValueRangeByCellRange(cmd IMessage, ch chan IMessage) {
+	cr := MakeRangeFromBytes(cmd.Payload())
+	if cr == nil {
+		go t.send(MakeError(cmd, "Error parsing cell range."), ch)
+	}
+	go func (){
+		vr := new(valuerange)
+		vr.Values = make(map[string]map[string]string)
+		listeners := make([]chan IMessage, 0)
+		for i := cr.StartRow; i < cr.StopRow; i++ {
+			_, ok := t.cells[i]
+			if !ok {
+				continue
+			}
+			vr.Values[strconv.Itoa(i)] = make(map[string]string)
+			for j := cr.StartColumn; j < cr.StopColumn; j++ {
+				cc, ok := t.cells[i][j]
+				if ok {
+					ch := MakeMessageChannel()
+					go t.sendToCell(cc, MakeCommand(GetCellValue, t.tableId, t.tableId, MakeCellLocation(i, j), nil, nil), ch)
+					listeners = append(listeners, ch)
+					vr.Values[strconv.Itoa(i)][strconv.Itoa(j)] = ""
+				}
+			}
+		}
+		for _, ch := range listeners {
+			message := <- ch
+			cell := MakeCellFromBytes(message.Payload())
+			vr.Values[strconv.Itoa(message.SourceCell().Row())][strconv.Itoa(message.SourceCell().Column())] = cell.DisplayValue()
+		}
+
+		ch <- MakeResponse(cmd, vr.ToBytes())
+	}()
+}
+
+func (t *table) editCellValue(cmd IMessage, ch chan IMessage) {
+	row := cmd.TargetCell().Row()
+	column := cmd.TargetCell().Column()
+
+	go func() {
+		_, ok := t.cells[row]
+		if !ok {
+			t.cells[row] = make(map[int]*cellChannel)
+		}
+
+		cc, ok := t.cells[row][column]
+		if !ok {
+			ch := MakeMessageChannel()
+			go t.createCell(row, column, "", ch)
+			<- ch // cell is created
+			cc = t.cells[row][column]
+		}
+
+		go t.sendToCell(cc, cmd, ch)
+	}()
+}
+
+func (t *table) TableId() string {
+	return t.tableId
+}
+
+func (t *table) send(msg IMessage, ch chan IMessage) {
+	ch <- msg
+}
+
+func (t *table) Listen() {
+	go func() {
+		for {
+			select {
+			case message := <- t.orchestrator.orchestratorToTable:
+				if message.TargetTable() != t.tableId {
+					continue
+				}
+				switch message.Operation() {
+				case CloseTable:
+					return
+				case GetValueRange:
+					go t.getValueRangeByCellRange(message, t.orchestrator.tableToOrchestrator)
+				case EditCellValue:
+					go t.editCellValue(message, t.orchestrator.tableToOrchestrator)
+				default:
+					go t.send(MakeResponse(message, nil), t.orchestrator.tableToOrchestrator)
+				}
+			}
+		}
+	}()
+}
+
+func MakeTable(tableId string, ch *tableorchestratorchannel) *table {
+	t := new(table)
+	t.tableId = tableId
+	t.orchestrator = ch
+	t.subscribers = MakeSubscribers()
+	t.cells = make(map[int]map[int]*cellChannel)
+	t.Listen()
+	go t.send(MakeCommand(TableOpened, tableId, "", nil, nil, nil), t.orchestrator.tableToOrchestrator)
+	return t
 }

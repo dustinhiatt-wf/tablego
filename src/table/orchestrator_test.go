@@ -9,11 +9,12 @@ package table
 
 import (
 	"testing"
+//	"log"
 )
 
 func TestOrchestratorCachesTable(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	o.GetTableById("test", ch)
 	if len(o.tables) != 1 {
 		t.Error("Table not cached correctly.")
@@ -26,7 +27,7 @@ func TestOrchestratorCachesTable(t *testing.T) {
 
 func TestOrchestratorCanRemoveTable(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	o.GetTableById("test", ch)
 	removeTable(o, "test")
 	_, ok := o.tables["test"]
@@ -37,7 +38,7 @@ func TestOrchestratorCanRemoveTable(t *testing.T) {
 
 func TestCheckTableLoaded(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	if o.IsTableLoaded("test") {
 		t.Error("Table not correctly identified as not being loaded.")
 	}
@@ -49,18 +50,18 @@ func TestCheckTableLoaded(t *testing.T) {
 
 func TestOrchestratorNotifiesOfTableOpen(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	o.GetTableById("test", ch)
 	msg := <- ch
-	if msg.table.id != "test" {
+	if msg.TargetTable() != "test" {
 		t.Error("Table not created correctly.")
 	}
 }
 
 func TestOrchestratorNotifiesMultipleUsersOfTableOpen(t *testing.T) {
 	o := MakeOrchestrator()
-	chOne := MakeValueChannel()
-	chTwo := MakeValueChannel()
+	chOne := MakeMessageChannel()
+	chTwo := MakeMessageChannel()
 	o.GetTableById("test", chOne)
 	o.GetTableById("test", chTwo)
 	if len(o.tables["test"].pendingRequests["tableOpened"].subscribers) != 2 {
@@ -69,23 +70,76 @@ func TestOrchestratorNotifiesMultipleUsersOfTableOpen(t *testing.T) {
 	messageOne := <- chOne
 	messageTwo := <- chTwo
 
-	if messageOne.table.id != "test" || messageTwo.table.id != "test" {
+	if messageOne.TargetTable() != "test" || messageTwo.TargetTable() != "test" {
 		t.Error("Table entity not received correctly.")
 	}
 }
 
 func TestOrchestratorNotifiesUsersWhoGetTableAfterLoad(t *testing.T) {
 	o := MakeOrchestrator()
-	chOne := MakeValueChannel()
+	chOne := MakeMessageChannel()
 	o.GetTableById("test", chOne)
 	<- chOne
-	ch := MakeValueChannel()
+	ch := MakeMessageChannel()
 	o.GetTableById("test", ch)
 	if len(o.tables["test"].pendingRequests[TableOpened].subscribers) != 0 {
 		t.Error("Subscribed to an already loaded table.")
 	}
 	message := <- ch
-	if message.table.id != "test" {
+	if message.TargetTable() != "test" {
 		t.Error("Table not returned correctly.")
+	}
+}
+
+func TestOrchestratorLoadsTableWhenCommandReceivedForTableNotLoaded(t *testing.T) {
+	o := MakeOrchestrator()
+	ch := MakeMessageChannel()
+	cmd := MakeCommand("test", "test", "", nil, nil, nil)
+	o.sendCommand(cmd, ch)
+	message := <- ch
+	if message.MessageId() != cmd.MessageId() {
+		t.Error("Response not formulated correctly.")
+	}
+}
+
+func TestOrchestratorRespondsToMultipleTables(t *testing.T) {
+	o := MakeOrchestrator()
+	chOne := MakeMessageChannel()
+	chTwo := MakeMessageChannel()
+	cmdOne := MakeCommand("test", "test", "", nil, nil, nil)
+	cmdTwo := MakeCommand("test", "test2", "", nil, nil, nil)
+	o.sendCommand(cmdOne, chOne)
+	o.sendCommand(cmdTwo, chTwo)
+	messageOne := <- chOne
+	messageTwo := <- chTwo
+
+	if messageOne.MessageId() != cmdOne.MessageId() {
+		t.Error("Response one not created correctly.")
+	}
+	if messageTwo.MessageId() != cmdTwo.MessageId() {
+		t.Error("Response two not created correctly.")
+	}
+}
+
+func TestOrchestratorRespondsToMultipleRequestsSameTable(t *testing.T) {
+	o := MakeOrchestrator()
+	chOne := MakeMessageChannel()
+	chTwo := MakeMessageChannel()
+	cmdOne := MakeCommand("test", "test", "", nil, nil, nil)
+	cmdTwo := MakeCommand("test", "test", "", nil, nil, nil)
+	o.sendCommand(cmdOne, chOne)
+	o.sendCommand(cmdTwo, chTwo)
+	messageOne := <- chOne
+	messageTwo := <- chTwo
+
+	if messageOne.MessageId() != cmdOne.MessageId() {
+		t.Error("Response one not created correctly.")
+	}
+	if messageTwo.MessageId() != cmdTwo.MessageId() {
+		t.Error("Response two not created correctly.")
+	}
+
+	if len(o.tables) != 1 {
+		t.Error("Tables not cached correctly.")
 	}
 }
