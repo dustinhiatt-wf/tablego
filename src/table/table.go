@@ -10,6 +10,7 @@ package table
 
 import (
 	"strconv"
+	"log"
 )
 
 /*
@@ -210,10 +211,14 @@ func (t *table) getCellByPosition(row, column int, client chan IMessage) {
 	}
 	cc, ok := t.cells[row][column]
 	if !ok {
+		log.Println("CREATING CELL")
 		go t.createCell(row, column, "",  client)
 	} else if !cc.cellInitialized { //currently being loaded
+		log.Println("WAITING FOR CELL INIT")
 		cc.subscribe(CellOpened, client)
 	} else { // table is loaded and ready
+		log.Println("CELL FOUND")
+		log.Println(cc)
 		go func () {
 			client <- MakeCommand(CellOpened, t.tableId, "", MakeCellLocation(row, column), nil, nil)
 		}()
@@ -242,12 +247,18 @@ func (t *table) listenToCell(cc *cellChannel) {
 	for {
 		select {
 		case message := <- cc.channel.cellToTable:
-			switch message.Operation() {
-			case CellOpened:
-				cc.cellInitialized = true
-				go cc.sendNotification(CellOpened, message)
-			default:
-				go cc.sendNotification(message.MessageId(), message)
+			log.Println("TABLE GOT MESSAGE FROM CELL")
+			if message.TargetTable() != "" && message.TargetTable() != t.tableId {
+				log.Println("IN TABLE TO ORCHESTRATOR")
+				go t.send(message, t.orchestrator.tableToOrchestrator)
+			} else {
+				switch message.Operation() {
+				case CellOpened:
+					cc.cellInitialized = true
+					go cc.sendNotification(CellOpened, message)
+				default:
+					go cc.sendNotification(message.MessageId(), message)
+				}
 			}
 		}
 	}
@@ -318,14 +329,41 @@ func (t *table) send(msg IMessage, ch chan IMessage) {
 	ch <- msg
 }
 
+func (t *table) forwardToChild(msg IMessage) {
+	if msg.TargetCell() == nil {
+		return
+	}
+
+	ch := MakeMessageChannel()
+	t.getCellByPosition(msg.TargetCell().Row(), msg.TargetCell().Column(), ch)
+	<- ch //to confirm it exists
+	log.Println("FINAL FORWARD TO CELL")
+	log.Println(msg.TargetCell().Row())
+	log.Println(msg.TargetCell().Column())
+	log.Println(t.cells[msg.TargetCell().Row()][msg.TargetCell().Column()].channel.tableToCell)
+	t.cells[msg.TargetCell().Row()][msg.TargetCell().Column()].channel.tableToCell <- msg
+}
+
 func (t *table) Listen() {
 	go func() {
 		for {
 			select {
 			case message := <- t.orchestrator.orchestratorToTable:
+				log.Println(message.TargetTable())
+				log.Println(t.tableId)
 				if message.TargetTable() != t.tableId {
 					continue
 				}
+				if message.TargetCell() != nil {
+					log.Println("FORWARDING TO CELL")
+					go t.forwardToChild(message)
+					continue
+				}
+
+				if message.GetType() == Response {
+					continue
+				}
+
 				switch message.Operation() {
 				case CloseTable:
 					return
@@ -334,6 +372,7 @@ func (t *table) Listen() {
 				case EditCellValue:
 					go t.editCellValue(message, t.orchestrator.tableToOrchestrator)
 				default:
+					log.Println("DEFAULT")
 					go t.send(MakeResponse(message, nil), t.orchestrator.tableToOrchestrator)
 				}
 			}
@@ -348,6 +387,6 @@ func MakeTable(tableId string, ch *tableorchestratorchannel) *table {
 	t.subscribers = MakeSubscribers()
 	t.cells = make(map[int]map[int]*cellChannel)
 	t.Listen()
-	go t.send(MakeCommand(TableOpened, tableId, "", nil, nil, nil), t.orchestrator.tableToOrchestrator)
+	go t.send(MakeCommand(TableOpened, "", tableId, nil, nil, nil), t.orchestrator.tableToOrchestrator)
 	return t
 }

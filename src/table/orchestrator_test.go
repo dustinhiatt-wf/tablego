@@ -9,7 +9,6 @@ package table
 
 import (
 	"testing"
-//	"log"
 )
 
 func TestOrchestratorCachesTable(t *testing.T) {
@@ -53,8 +52,10 @@ func TestOrchestratorNotifiesOfTableOpen(t *testing.T) {
 	ch := MakeMessageChannel()
 	o.GetTableById("test", ch)
 	msg := <- ch
-	if msg.TargetTable() != "test" {
-		t.Error("Table not created correctly.")
+	if msg.Operation() != TableOpened {
+		t.Error("Table not opened correctly.")
+	} else if msg.SourceTable() != "test" {
+		t.Error("Table opened source not opened correctly.")
 	}
 }
 
@@ -70,7 +71,7 @@ func TestOrchestratorNotifiesMultipleUsersOfTableOpen(t *testing.T) {
 	messageOne := <- chOne
 	messageTwo := <- chTwo
 
-	if messageOne.TargetTable() != "test" || messageTwo.TargetTable() != "test" {
+	if messageOne.SourceTable() != "test" || messageTwo.SourceTable() != "test" {
 		t.Error("Table entity not received correctly.")
 	}
 }
@@ -86,7 +87,7 @@ func TestOrchestratorNotifiesUsersWhoGetTableAfterLoad(t *testing.T) {
 		t.Error("Subscribed to an already loaded table.")
 	}
 	message := <- ch
-	if message.TargetTable() != "test" {
+	if message.SourceTable() != "test" {
 		t.Error("Table not returned correctly.")
 	}
 }
@@ -141,5 +142,57 @@ func TestOrchestratorRespondsToMultipleRequestsSameTable(t *testing.T) {
 
 	if len(o.tables) != 1 {
 		t.Error("Tables not cached correctly.")
+	}
+}
+
+/*
+This will deadlock if not forwarded
+ */
+func TestOrchestratorForwarding(t *testing.T) {
+	o := MakeOrchestrator()
+	ch := MakeMessageChannel()
+	o.GetTableById("test", ch)
+	<- ch
+	o.GetTableById("test2", ch)
+	<- ch
+	o.tables["test2"].channel = MakeTableOrchestratorChannel()
+	o.tables["test"].channel.tableToOrchestrator <- MakeCommand("test", "test2", "test", nil, nil, nil)
+	<- o.tables["test2"].channel.orchestratorToTable
+}
+
+func TestSubscribeToDistantTableIntegration(t *testing.T) {
+	o := MakeOrchestrator()
+	ch := MakeMessageChannel()
+	orCh := MakeTableChannel()
+	tbl := MakeTable("test", orCh.channel)
+	<- orCh.channel.tableToOrchestrator
+	o.tables["test"] = orCh
+	orCh.tableInitialized = true
+	go o.listenToTable(orCh)
+
+	cc := MakeCellChannel()
+	MakeCell(1, 1, "", MakeCellChannel())
+	tbl.cells[1] = make(map[int]*cellChannel)
+	tbl.cells[1][1] = cc
+	cc.cellInitialized = true
+	go tbl.listenToCell(cc)
+	o.GetTableById("test2", ch)
+	<- ch // table created
+
+	o.sendCommand(MakeCommand(EditCellValue, "test2", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test").ToBytes()), ch)
+	message := <-ch
+	cc.channel.cellToTable <- MakeCommand(Subscribe, "test2", "test", MakeCellLocation(1, 1), MakeCellLocation(1, 1), nil)
+	message = <- cc.channel.tableToCell // we are subscribed
+	c := MakeCellFromBytes(message.Payload())
+	if c.CellDisplayValue != "test" {
+		t.Error("Subscribe payload not returned correctly.")
+	}
+	o.sendCommand(MakeCommand(EditCellValue, "test2", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test2").ToBytes()), ch)
+	<- ch
+
+	message = <- cc.channel.tableToCell
+	c = MakeCellFromBytes(message.Payload())
+	if c.DisplayValue() != "test2" {
+		t.Error("Subscribe payload after update not returned correctly.")
 	}
 }

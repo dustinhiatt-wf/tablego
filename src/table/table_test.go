@@ -10,6 +10,7 @@ package table
 
 import (
 	"testing"
+	"time"
 )
 
 func TestCreateTable(t *testing.T) {
@@ -67,7 +68,7 @@ func TestGetValueExists(t *testing.T) {
 
 func TestEditExistingValue(t *testing.T) {
 	orCh := MakeTableOrchestratorChannel()
-	table := MakeTable("tset", orCh)
+	table := MakeTable("test", orCh)
 	<- orCh.tableToOrchestrator
 	ch := MakeMessageChannel()
 	table.editCellValue(MakeCommand(EditCellValue, "test", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test").ToBytes()), ch)
@@ -80,6 +81,60 @@ func TestEditExistingValue(t *testing.T) {
 	}
 }
 
+func TestDoNotRespondToResponse(t *testing.T) {
+	orCh := MakeTableOrchestratorChannel()
+	MakeTable("test", orCh)
+	cmd := MakeCommand("test", "test", "", nil, nil, nil)
+	orCh.orchestratorToTable <- MakeResponse(cmd, nil)
+	message := <- orCh.tableToOrchestrator // table opened
+	go func() {
+		message = <- orCh.tableToOrchestrator
+		t.Error("We got a message from a response.")
+	}()
+	time.Sleep(20 * time.Millisecond) // I don't care for this method of checking, but it'll have to do until I can think of something better
+}
+
+func TestForwardFromCell(t *testing.T) {
+	orCh := MakeTableOrchestratorChannel()
+	table := MakeTable("test", orCh)
+	<- orCh.tableToOrchestrator // table created
+	ch := MakeMessageChannel()
+	table.createCell(1, 1, "test", ch)
+	<- ch // cell created
+	table.cells[1][1].channel.cellToTable <- MakeCommand("test", "test2", "test", MakeCellLocation(1, 1), MakeCellLocation(1, 1), nil)
+	message := <- orCh.tableToOrchestrator
+	if message.TargetTable() != "test2" {
+		t.Error("Message from cell not forwarded correctly.")
+	}
+}
+
+func TestForwardCommandToCell(t *testing.T) {
+	orCh := MakeTableOrchestratorChannel()
+	table := MakeTable("test", orCh)
+	<- orCh.tableToOrchestrator // table created
+	table.cells[1] = make(map[int]*cellChannel)
+	table.cells[1][1] = MakeCellChannel()
+	table.cells[1][1].cellInitialized = true
+	orCh.orchestratorToTable <- MakeCommand("test", "test", "", MakeCellLocation(1, 1), nil, nil)
+	message := <- table.cells[1][1].channel.tableToCell
+	if message.Operation() != "test" {
+		t.Error("Message not forwarded to cell correctly.")
+	}
+}
+
+func TestForwardCommandToOrchestrator(t *testing.T) {
+	orCh := MakeTableOrchestratorChannel()
+	table := MakeTable("test", orCh)
+	<- orCh.tableToOrchestrator //table created
+	ch := MakeMessageChannel()
+	table.createCell(1, 1, "", ch)
+	<- ch
+	table.cells[1][1].channel.cellToTable <- MakeCommand("test", "test2", "", nil, nil, nil)
+	message := <- orCh.tableToOrchestrator
+	if message.Operation() != "test" {
+		t.Error("Message not forwarded to orchestrator from cell.")
+	}
+}
 
 /*
 

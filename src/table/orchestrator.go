@@ -7,6 +7,8 @@
  */
 package table
 
+import "log"
+
 import (
 //	"log"
 )
@@ -79,6 +81,9 @@ func (o *orchestrator) sendCommand(cmd ICommand, ch chan IMessage) {
 		if cmd.TargetTable() == "" {
 			return
 		}
+		if cmd.SourceTable() == "" {
+			cmd.SetSourceTable("orchestrator")
+		}
 		tableCh := MakeMessageChannel()
 		var tc *tablechannel
 		go func () {
@@ -86,6 +91,7 @@ func (o *orchestrator) sendCommand(cmd ICommand, ch chan IMessage) {
 				select {
 				case message := <- tableCh:
 					if message.Operation() == TableOpened {
+						log.Println("Table is opened.")
 						tc = o.tables[cmd.TargetTable()]
 						internalSendCommand(cmd, tc, ch)
 						return
@@ -98,17 +104,21 @@ func (o *orchestrator) sendCommand(cmd ICommand, ch chan IMessage) {
 	}()
 }
 
-func listenToTable(tc *tablechannel) {
+func (o *orchestrator) listenToTable(tc *tablechannel) {
 	for {
 		select {
 		case message := <- tc.channel.tableToOrchestrator:
-			switch message.Operation() {
-			case TableOpened:
-				tc.tableInitialized = true
-				tc.sendNotification(TableOpened, message)
-			default:
-				tc.sendNotification(message.MessageId(), message)
-
+			if message.TargetTable() != "" && message.TargetTable() != "orchestrator" {
+				log.Println("FORWARDING")
+				o.sendCommand(message, nil)
+			} else {
+				switch message.Operation() {
+				case TableOpened:
+					tc.tableInitialized = true
+					go tc.sendNotification(TableOpened, message)
+				default:
+					go tc.sendNotification(message.MessageId(), message)
+				}
 			}
 		}
 	}
@@ -119,7 +129,9 @@ func createTable(ch *tableorchestratorchannel, id string) {
 }
 
 func internalSendCommand(cmd ICommand, tc *tablechannel, ch chan IMessage) {
-	tc.subscribe(cmd.MessageId(), ch)
+	if ch != nil {
+		tc.subscribe(cmd.MessageId(), ch)
+	}
 	tc.channel.orchestratorToTable <- cmd
 }
 
@@ -132,13 +144,13 @@ func (o *orchestrator) GetTableById(id string, client chan IMessage) {
 	if !ok {
 		o.tables[id] = MakeTableChannel()
 		o.tables[id].subscribe("tableOpened", client)
-		go listenToTable(o.tables[id])
+		go o.listenToTable(o.tables[id])
 		go createTable(o.tables[id].channel, id)
 	} else if !tc.tableInitialized { //currently being loaded
 		tc.subscribe(TableOpened, client)
 	} else { // table is loaded and ready
 		go func () {
-			client <- MakeCommand(TableOpened, id, "", nil, nil, nil)
+			client <- MakeCommand(TableOpened, "", id, nil, nil, nil)
 		}()
 	}
 }

@@ -7,6 +7,15 @@
  */
 package table
 
+import (
+	"time"
+)
+
+const (
+	Response		= "response"
+	Command			= "command"
+)
+
 type ISerializable interface {
 	ToBytes()	[]byte
 }
@@ -44,6 +53,9 @@ type IMessage interface {
 	MessageId()				string
 	Error()					string
 	Equal(msg IMessage) 	bool
+	GetType()				string
+	SetSourceTable(string)
+	Timestamp()				int
 }
 
 type message struct {
@@ -55,6 +67,8 @@ type message struct {
 	payload			[]byte
 	messageId		string
 	error			string
+	kind			string
+	timestamp		int
 }
 
 func (m *message) Operation() string {
@@ -89,6 +103,18 @@ func (m *message) Error() string {
 	return m.error
 }
 
+func (m *message) GetType() string {
+	return m.kind
+}
+
+func (m *message) SetSourceTable(value string) {
+	m.sourceTable = value
+}
+
+func (m *message) Timestamp() int {
+	return m.timestamp
+}
+
 func (m *message) Equal(msg IMessage) bool {
 	if msg.TargetCell().Row() == m.TargetCell().Row() &&
 	   msg.TargetCell().Column() == m.TargetCell().Column() &&
@@ -118,6 +144,8 @@ func MakeCommand(operation, targetTable, sourceTable string, targetCell, sourceC
 	message.sourceCell = sourceCell
 	message.sourceTable = sourceTable
 	message.messageId = GenUUID()
+	message.kind = Command
+	message.timestamp = time.Now().Nanosecond()
 	return message
 }
 
@@ -138,6 +166,7 @@ func MakeResponse(command ICommand, payload []byte) *response {
 	response.sourceTable = command.TargetTable()
 	response.messageId = command.MessageId()
 	response.operation = command.Operation()
+	response.kind = Response
 	return response
 }
 

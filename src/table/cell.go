@@ -2,6 +2,7 @@ package table
 
 import (
 	"encoding/json"
+	"log"
 )
 
 type ICell interface {
@@ -13,6 +14,7 @@ type cell struct {
 	ISerializable
 	CellDisplayValue	string
 	Value				string
+	LastUpdated			int
 	cellChannel			*cellChannel
 	observers			*observers
 }
@@ -60,12 +62,23 @@ func (c *cell) listenToTable() {
 	for {
 		select {
 		case message := <- c.cellChannel.channel.tableToCell:
+			if message.GetType() == Response {
+				log.Println("ENDING DUE TO RESPONSE")
+				continue
+			}
+
 			switch message.Operation() {
 			case GetCellValue:
 				go c.send(MakeResponse(message, c.ToBytes()), c.cellChannel.channel.cellToTable)
 			case EditCellValue:
+				if message.Timestamp() < c.LastUpdated {
+					go c.send(MakeError(message, "Attempted to update with stale value."), c.cellChannel.channel.cellToTable)
+					continue
+				}
+
 				tblCmd := MakeTableCommandFromJson(message.Payload())
 				c.SetValue(tblCmd.Value)
+				log.Println("RESPONDING FROM CELL")
 				go c.send(MakeResponse(message, c.ToBytes()), c.cellChannel.channel.cellToTable)
 			case Subscribe:
 				c.Subscribe(message)
