@@ -8,26 +8,49 @@
 package table
 
 import (
-	"time"
-)
-
-const (
-	Response		= "response"
-	Command			= "command"
+	"node"
 )
 
 type ISerializable interface {
 	ToBytes()	[]byte
 }
 
+type ITableCoordinates interface {
+	node.ICoordinates
+	TableId()					string
+	CellLocation()				ICellLocation
+}
+
+type coordinates struct {
+	node.ICoordinates
+	tableId				string
+	cellLocation		ICellLocation
+}
+
+func (c *coordinates) Equal(other node.ICoordinates) bool {
+	o := other.(ITableCoordinates)
+	if c.cellLocation == nil && o.CellLocation() != nil {
+		return false
+	}
+	return c.tableId == o.TableId() && c.cellLocation.Equal(o.CellLocation())
+}
+
 type ICellLocation interface {
-	Row()		int
-	Column()	int
+	Row()							int
+	Column()						int
+	Equal(other ICellLocation)		bool
 }
 
 type cellLocation struct {
 	cellRow			int
 	cellColumn		int
+}
+
+func (cl *cellLocation) Equal(other ICellLocation) bool {
+	if other == nil {
+		return false
+	}
+	return cl.cellRow == other.Row() && cl.cellColumn == other.Column()
 }
 
 func (cl *cellLocation) Row() int {
@@ -43,139 +66,9 @@ func MakeCellLocation(row, column int) ICellLocation {
 	return cl
 }
 
-type IMessage interface {
-	SourceTable()			string
-	SourceCell()			ICellLocation
-	TargetTable()			string
-	TargetCell()			ICellLocation
-	Operation()				string
-	Payload()				[]byte
-	MessageId()				string
-	Error()					string
-	Equal(msg IMessage) 	bool
-	GetType()				string
-	SetSourceTable(string)
-	Timestamp()				int
-}
-
-type message struct {
-	sourceTable		string
-	sourceCell		ICellLocation
-	targetTable		string
-	targetCell		ICellLocation
-	operation		string
-	payload			[]byte
-	messageId		string
-	error			string
-	kind			string
-	timestamp		int
-}
-
-func (m *message) Operation() string {
-	return m.operation
-}
-
-func (m *message) Payload() []byte {
-	return m.payload
-}
-
-func (m *message) SourceTable() string {
-	return m.sourceTable
-}
-
-func (m *message) SourceCell() ICellLocation {
-	return m.sourceCell
-}
-
-func (m *message) TargetTable() string {
-	return m.targetTable
-}
-
-func (m *message) TargetCell() ICellLocation {
-	return m.targetCell
-}
-
-func (m *message) MessageId() string {
-	return m.messageId
-}
-
-func (m *message) Error() string {
-	return m.error
-}
-
-func (m *message) GetType() string {
-	return m.kind
-}
-
-func (m *message) SetSourceTable(value string) {
-	m.sourceTable = value
-}
-
-func (m *message) Timestamp() int {
-	return m.timestamp
-}
-
-func (m *message) Equal(msg IMessage) bool {
-	if msg.TargetCell().Row() == m.TargetCell().Row() &&
-	   msg.TargetCell().Column() == m.TargetCell().Column() &&
-	   msg.SourceCell().Row() == m.SourceCell().Row() &&
-	   msg.SourceCell().Column() == m.SourceCell().Column() &&
-	   msg.TargetTable() == m.TargetTable() &&
-	   msg.SourceTable() == m.SourceTable() {
-		return true
-	}
-	return false
-}
-
-type ICommand interface {
-	IMessage
-}
-
-type command struct {
-	message
-}
-
-func MakeCommand(operation, targetTable, sourceTable string, targetCell, sourceCell ICellLocation, payload []byte) *command {
-	message := new(command)
-	message.operation = operation
-	message.payload = payload
-	message.targetCell = targetCell
-	message.targetTable = targetTable
-	message.sourceCell = sourceCell
-	message.sourceTable = sourceTable
-	message.messageId = GenUUID()
-	message.kind = Command
-	message.timestamp = time.Now().Nanosecond()
-	return message
-}
-
-type IResponse interface {
-	IMessage
-}
-
-type response struct {
-	message
-}
-
-func MakeResponse(command ICommand, payload []byte) *response {
-	response := new(response)
-	response.payload = payload
-	response.targetCell = command.SourceCell()
-	response.targetTable = command.SourceTable()
-	response.sourceCell = command.TargetCell()
-	response.sourceTable = command.TargetTable()
-	response.messageId = command.MessageId()
-	response.operation = command.Operation()
-	response.kind = Response
-	return response
-}
-
-func MakeMessageChannel() chan IMessage {
-	return make(chan IMessage)
-}
-
-func MakeError(command ICommand, error string) IMessage {
-	response := MakeResponse(command, nil)
-	response.error = error
-	return response
+func MakeCoordinates(tableId string, cellLocation ICellLocation) node.ICoordinates {
+	c := new(coordinates)
+	c.tableId = tableId
+	c.cellLocation = cellLocation
+	return c
 }

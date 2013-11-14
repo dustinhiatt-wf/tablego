@@ -5,7 +5,7 @@
  * Time: 10:23 AM
  * To change this template use File | Settings | File Templates.
  */
-package table
+package node
 
 import (
 	"strings"

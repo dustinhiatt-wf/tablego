@@ -2,7 +2,7 @@ package table
 
 import (
 	"encoding/json"
-	"log"
+	"node"
 )
 
 type ICell interface {
@@ -12,11 +12,15 @@ type ICell interface {
 
 type cell struct {
 	ISerializable
-	CellDisplayValue	string
-	Value				string
-	LastUpdated			int
-	cellChannel			*cellChannel
-	observers			*observers
+	ICell
+	node.INode
+	node.ICommunicationHandler
+	node.INodeFactory
+	CellDisplayValue				string
+	Value							string
+	LastUpdated						int
+	observers						*observers
+	pendingRequests					map[string]chan node.IMessage
 }
 
 func (c *cell) ToBytes() []byte {
@@ -50,51 +54,54 @@ func (c *cell) SetValue(value string) {
 	go c.observers.notifyObservers(CellUpdated, c.cellChannel.channel.cellToTable, c.ToBytes())
 }
 
-func (c *cell) Subscribe(cmd ICommand) {
-	c.observers.addObserver(cmd)
-}
+func (c *cell) onMessageFromParent(msg IMessage) {
+	if msg.GetType() == node.Response {
 
-func (c *cell) send(msg IMessage, ch chan IMessage) {
-	ch <- msg
-}
-
-func (c *cell) listenToTable() {
-	for {
-		select {
-		case message := <- c.cellChannel.channel.tableToCell:
-			if message.GetType() == Response {
-				log.Println("ENDING DUE TO RESPONSE")
+	} else if msg.GetType() == node.Command {
+		switch message.Operation() {
+		case GetCellValue:
+			resp := node.MakeResponse(message, c.ToBytes())
+			go c.INode.send(c.INode.Parent().ChildToParent(), resp)
+		case EditCellValue:
+			if message.Timestamp() < c.LastUpdated {
+				err := node.MakeError(message, "You have attempted a stale update.")
+				go c.send(c.INode.Parent().ChildToParent(), err)
 				continue
 			}
 
-			switch message.Operation() {
-			case GetCellValue:
-				go c.send(MakeResponse(message, c.ToBytes()), c.cellChannel.channel.cellToTable)
-			case EditCellValue:
-				if message.Timestamp() < c.LastUpdated {
-					go c.send(MakeError(message, "Attempted to update with stale value."), c.cellChannel.channel.cellToTable)
-					continue
-				}
-
-				tblCmd := MakeTableCommandFromJson(message.Payload())
-				c.SetValue(tblCmd.Value)
-				log.Println("RESPONDING FROM CELL")
-				go c.send(MakeResponse(message, c.ToBytes()), c.cellChannel.channel.cellToTable)
-			case Subscribe:
-				c.Subscribe(message)
-				go c.send(MakeResponse(message, c.ToBytes()), c.cellChannel.channel.cellToTable)
-			}
+			tblCmd := MakeTableCommandFromJson(message.Payload())
+			c.SetValue(tblCmd.Value)
+			resp := node.MakeResponse(message, c.ToBytes())
+			go c.send(c.INode.Parent().ChildToParent(), resp)
 		}
+	} else {
+		//TODO: log error
 	}
 }
 
-func MakeCell(row, column int, value string, cc *cellChannel) *cell {
+func (c *cell) onMessageFromChild(msg IMessage) {
+	panic("Cells should not receive messages from children")
+}
+
+func (c *cell) GetChild(coords ICoordinates) IChild {
+	//TODO: so we can handle embedded formulas, they should be children
+	panic("Cells have no children currently.")
+}
+
+func (t *table) makeChildNode(parentChannel IChild, childCoordinates ICoordinates) INode {
+	panic("Cells can't create children.")
+}
+
+func (c *cell) Subscribe(msg node.IMessage) {
+	c.observers.addObserver(msg)
+}
+
+func MakeCell(parentChannel IChannel, coordinates, parentCoordinates ICoordinates, value string) *cell {
 	cell := new(cell)
 	cell.Value = value
 	cell.CellDisplayValue = value
-	cell.cellChannel = cc
 	cell.observers = MakeObservers()
-	go cell.listenToTable()
-	go cell.send(MakeCommand(CellOpened, "", "", MakeCellLocation(row, column), nil, nil), cc.channel.cellToTable)
+	cell.pendingRequests = make(map[string]chan node.IMessage)
+	cell.INode = node.MakeNode(parentChannel, coordinates, parentCoordinates, cell, cell)
 	return cell
 }

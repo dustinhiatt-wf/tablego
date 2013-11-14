@@ -9,7 +9,6 @@ package table
 
 const (
 	GetTable string 	= "getTable"
-	TableOpened			= "tableOpened"
 	TableClosed			= "tableClosed"
 	EditCellValue		= "editCellValue"
 	CellUpdated			= "cellUpdated"
@@ -17,7 +16,6 @@ const (
 	GetValueAt			= "getValueAt"
 	GetValueRange		= "getValueRange"
 	CloseTable			= "closeTable"
-	CellOpened			= "cellOpened"
 	GetCellValue		= "getCellValue"
 	Subscribe			= "subscribe"
 )

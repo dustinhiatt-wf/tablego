@@ -5,7 +5,7 @@
  * Time: 10:22 AM
  * To change this template use File | Settings | File Templates.
  */
-package table
+package node
 
 // relevant bits from https://github.com/abneptis/GoUUID/blob/master/uuid.go
 
