@@ -1,17 +1,16 @@
 package table
 
-
 import (
-	"testing"
+	"log"
 	"node"
 	"runtime"
-	"log"
+	"testing"
 )
 
 func TestCreateTable(t *testing.T) {
 	child := node.MakeIChild()
 	table := MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
-	<- child.Channel().ChildToParent() // table created
+	<-child.Channel().ChildToParent() // table created
 	if table.children == nil {
 		t.Error("Table not created correctly.")
 	}
@@ -20,9 +19,9 @@ func TestCreateTable(t *testing.T) {
 func TestTableCreatesCell(t *testing.T) {
 	child := node.MakeIChild()
 	table := MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
-	<- child.Channel().ChildToParent() // table initialized
+	<-child.Channel().ChildToParent() // table initialized
 	child.Channel().ParentToChild() <- node.MakeCommand("test", MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), nil)
-	message := <- child.Channel().ChildToParent()
+	message := <-child.Channel().ChildToParent()
 	if message.Operation() != "test" {
 		t.Error("Cell not created correctly.")
 	} else if len(table.children) != 1 {
@@ -33,13 +32,13 @@ func TestTableCreatesCell(t *testing.T) {
 func TestForwardsToCells(t *testing.T) {
 	child := node.MakeIChild()
 	table := MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
-	<- child.Channel().ChildToParent() //table initialized
-	child.Channel().ParentToChild() <- node.MakeCommand("test", MakeCoordinates("test", MakeCellLocation(1, 1,)), MakeCoordinates("", nil), nil)
-	<- child.Channel().ChildToParent() // cell initialized
+	<-child.Channel().ChildToParent() //table initialized
+	child.Channel().ParentToChild() <- node.MakeCommand("test", MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), nil)
+	<-child.Channel().ChildToParent() // cell initialized
 	cellChild := node.MakeIChild()
 	table.children[1][2] = cellChild
 	table.children[1][1].Channel().ChildToParent() <- node.MakeCommand("test", MakeCoordinates("test", MakeCellLocation(1, 2)), MakeCoordinates("test", MakeCellLocation(1, 1)), nil)
-	msg := <- cellChild.Channel().ParentToChild()
+	msg := <-cellChild.Channel().ParentToChild()
 	if msg.Operation() != "test" {
 		t.Error("Table not forwarding to cells correctly.")
 	}
@@ -49,13 +48,13 @@ func TestGetValueRange(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	child := node.MakeIChild()
 	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
-	<- child.Channel().ChildToParent() //table initialized
+	<-child.Channel().ChildToParent() //table initialized
 	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
-	<- child.Channel().ChildToParent() // cell's value set
+	<-child.Channel().ChildToParent() // cell's value set
 	cr := MakeRange("A1:C3")
 
 	child.Channel().ParentToChild() <- node.MakeCommand(GetValueRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
-	message := <- child.Channel().ChildToParent()
+	message := <-child.Channel().ChildToParent()
 
 	vr := MakeValueRangeFromBytes(message.Payload())
 
@@ -68,12 +67,12 @@ func TestGetMultipleValueRange(t *testing.T) {
 	log.Println(runtime.GOMAXPROCS(runtime.NumCPU()))
 	child := node.MakeIChild()
 	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
-	<- child.Channel().ChildToParent() // cell's value set
+	<-child.Channel().ChildToParent() // cell's value set
 	for i := 0; i < 100; i++ {
 		child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(i, 0)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
 	}
 	for i := 0; i < 100; i++ {
-		<- child.Channel().ChildToParent()
+		<-child.Channel().ChildToParent()
 	}
 	cr := new(cellrange)
 	cr.StartRow = 0
@@ -81,7 +80,7 @@ func TestGetMultipleValueRange(t *testing.T) {
 	cr.StartColumn = 0
 	cr.StopColumn = 1
 	child.Channel().ParentToChild() <- node.MakeCommand(GetValueRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
-	message := <- child.Channel().ChildToParent()
+	message := <-child.Channel().ChildToParent()
 
 	vr := MakeValueRangeFromBytes(message.Payload())
 	if len(vr.Values) != 100 {
@@ -93,12 +92,12 @@ func BenchmarkAddAndGetCells(b *testing.B) {
 	log.Println(runtime.GOMAXPROCS(1))
 	child := node.MakeIChild()
 	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
-	<- child.Channel().ChildToParent() // cell's value set
+	<-child.Channel().ChildToParent() // cell's value set
 	for i := 0; i < b.N; i++ {
 		child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(i, 0)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
 	}
 	for i := 0; i < b.N; i++ {
-		<- child.Channel().ChildToParent()
+		<-child.Channel().ChildToParent()
 	}
 	cr := new(cellrange)
 	cr.StartRow = 0
@@ -107,7 +106,7 @@ func BenchmarkAddAndGetCells(b *testing.B) {
 	cr.StopColumn = 1
 	b.ResetTimer()
 	child.Channel().ParentToChild() <- node.MakeCommand(GetValueRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
-	message := <- child.Channel().ChildToParent()
+	message := <-child.Channel().ChildToParent()
 
 	vr := MakeValueRangeFromBytes(message.Payload())
 	if len(vr.Values) != b.N {

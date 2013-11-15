@@ -8,15 +8,14 @@
 package table
 
 const (
-	GetTable string 	= "getTable"
-	TableClosed			= "tableClosed"
-	EditCellValue		= "editCellValue"
-	CellUpdated			= "cellUpdated"
-	Unsubscribe			= "unsubscribe"
-	GetValueAt			= "getValueAt"
-	GetValueRange		= "getValueRange"
-	CloseTable			= "closeTable"
-	GetCellValue		= "getCellValue"
-	Subscribe			= "subscribe"
+	GetTable      string = "getTable"
+	TableClosed          = "tableClosed"
+	EditCellValue        = "editCellValue"
+	CellUpdated          = "cellUpdated"
+	Unsubscribe          = "unsubscribe"
+	GetValueAt           = "getValueAt"
+	GetValueRange        = "getValueRange"
+	CloseTable           = "closeTable"
+	GetCellValue         = "getCellValue"
+	Subscribe            = "subscribe"
 )
-

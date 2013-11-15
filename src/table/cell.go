@@ -6,9 +6,9 @@ import (
 )
 
 type ICell interface {
-	DisplayValue()				string
+	DisplayValue() string
 	SetValue(value string)
-	GetCellValue()				*cellValue
+	GetCellValue() *cellValue
 }
 
 type cell struct {
@@ -17,17 +17,17 @@ type cell struct {
 	node.INode
 	node.ICommunicationHandler
 	node.INodeFactory
-	CellDisplayValue				string
-	Value							string
-	LastUpdated						int
-	observers						*observers
-	pendingRequests					map[string]chan node.IMessage
+	CellDisplayValue string
+	Value            string
+	LastUpdated      int
+	observers        *observers
+	pendingRequests  map[string]chan node.IMessage
 }
 
 type cellValue struct {
-	CellDisplayValue				string
-	Value							string
-	LastUpdated						int
+	CellDisplayValue string
+	Value            string
+	LastUpdated      int
 }
 
 func makeCellValue(cellDisplayValue, value string, lastUpdated int) *cellValue {

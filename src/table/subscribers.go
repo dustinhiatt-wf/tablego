@@ -15,9 +15,9 @@ import (
 This naming convention should obviously be cleaned up, but observers
 are looking for changes to an item while subscribers are subscribed to a
 specific event on any channel
- */
+*/
 type observers struct {
-	observers		[]node.IMessage
+	observers []node.IMessage
 }
 
 func (o *observers) isObserversInList(cmd node.IMessage) bool {
@@ -46,7 +46,7 @@ func (o *observers) removeObserver(cmd node.IMessage) {
 
 func (o *observers) notifyObservers(operation string, ch chan node.IMessage, bytes []byte) {
 	for _, cmd := range o.observers {
-		go func () {
+		go func() {
 			response := node.MakeResponse(cmd, bytes)
 			ch <- response
 		}()
@@ -54,7 +54,7 @@ func (o *observers) notifyObservers(operation string, ch chan node.IMessage, byt
 }
 
 func (o *observers) addObserver(cmd node.IMessage) {
-	if (o.isObserversInList(cmd)) {
+	if o.isObserversInList(cmd) {
 		return
 	}
 	o.observers = append(o.observers, cmd)

@@ -13,12 +13,12 @@ import (
 )
 
 type tablerange struct {
-	cells 	 	map[int]map[int]ICell
+	cells map[int]map[int]ICell
 }
 
 type valuerange struct {
 	ISerializable
-	Values 		map[string]map[string]string
+	Values map[string]map[string]string
 }
 
 func (vr *valuerange) ToBytes() []byte {

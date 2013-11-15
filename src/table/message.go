@@ -12,19 +12,19 @@ import (
 )
 
 type ISerializable interface {
-	ToBytes()	[]byte
+	ToBytes() []byte
 }
 
 type ITableCoordinates interface {
 	node.ICoordinates
-	TableId()					string
-	CellLocation()				ICellLocation
+	TableId() string
+	CellLocation() ICellLocation
 }
 
 type coordinates struct {
 	ITableCoordinates
-	tableId				string
-	cellLocation		ICellLocation
+	tableId      string
+	cellLocation ICellLocation
 }
 
 func (c *coordinates) Equal(other node.ICoordinates) bool {
@@ -46,14 +46,14 @@ func (c *coordinates) TableId() string {
 }
 
 type ICellLocation interface {
-	Row()							int
-	Column()						int
-	Equal(other ICellLocation)		bool
+	Row() int
+	Column() int
+	Equal(other ICellLocation) bool
 }
 
 type cellLocation struct {
-	cellRow			int
-	cellColumn		int
+	cellRow    int
+	cellColumn int
 }
 
 func (cl *cellLocation) Equal(other ICellLocation) bool {
@@ -84,11 +84,11 @@ func MakeCoordinates(tableId string, cellLocation ICellLocation) node.ICoordinat
 }
 
 type addToChildMessage struct {
-	row				int
-	column			int
-	tableId			string
-	child			node.IChild
-	returnChannel	chan node.IChild
+	row           int
+	column        int
+	tableId       string
+	child         node.IChild
+	returnChannel chan node.IChild
 }
 
 func makeAddToChildMessage(row, column int, tableId string, child node.IChild) *addToChildMessage {

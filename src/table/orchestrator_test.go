@@ -8,8 +8,8 @@
 package table
 
 import (
-	"testing"
 	"node"
+	"testing"
 )
 
 func TestCreateOrchestrator(t *testing.T) {
@@ -31,7 +31,7 @@ func TestCreateChildTable(t *testing.T) {
 	o := MakeOrchestrator()
 	ch := node.MakeMessageChannel()
 	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
-	<- ch //table initialized
+	<-ch //table initialized
 	if len(o.children) != 1 {
 		t.Error("Child table not created.")
 	}
@@ -41,9 +41,9 @@ func TestOrchestratorReturnsCachedTable(t *testing.T) {
 	o := MakeOrchestrator()
 	ch := node.MakeMessageChannel()
 	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
-	<- ch
+	<-ch
 	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
-	<- ch
+	<-ch
 	if len(o.children) != 1 {
 		t.Error("Child cached more than once")
 	}
@@ -55,8 +55,8 @@ func TestOrchestratorNotifiesOnTableCreation(t *testing.T) {
 	chTwo := node.MakeMessageChannel()
 	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
 	o.INode.GetOrCreateChild(chTwo, MakeCoordinates("test", nil))
-	<- ch
-	<- chTwo
+	<-ch
+	<-chTwo
 	if len(o.children) != 1 {
 		t.Error("Child tables not created correctly.")
 	}
@@ -66,11 +66,11 @@ func TestOrchestratorRoutesToChild(t *testing.T) {
 	o := MakeOrchestrator()
 	ch := node.MakeMessageChannel()
 	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
-	<- ch
+	<-ch
 	tblCh := node.MakeIChild()
 	o.children["test2"] = tblCh
 	o.children["test"].Channel().ChildToParent() <- node.MakeCommand("test", MakeCoordinates("test2", nil), MakeCoordinates("test", nil), nil)
-	msg := <- tblCh.Channel().ParentToChild()
+	msg := <-tblCh.Channel().ParentToChild()
 	if msg.Operation() != "test" {
 		t.Error("Orchestrator did not forward message correctly.")
 	}

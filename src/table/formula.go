@@ -8,12 +8,13 @@
 package table
 
 import (
-	"strconv"
+	"encoding/json"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
-	"math"
-	"encoding/json"
+
 //	"log"
 )
 
@@ -23,11 +24,11 @@ const (
 
 type cellrange struct {
 	ISerializable
-	StartRow		int
-	StopRow			int
-	StartColumn		int
-	StopColumn		int
-	TableId			string
+	StartRow    int
+	StopRow     int
+	StartColumn int
+	StopColumn  int
+	TableId     string
 }
 
 func (cr *cellrange) ToBytes() []byte {
@@ -69,17 +70,17 @@ func MakeRangeFromBytes(bytes []byte) *cellrange {
 func parseFormula(value string) []string {
 	funcCall := value[1:len(value)]
 	funcParts := strings.Split(funcCall, "(")
-	funcParts[1] = funcParts[1][:len(funcParts[1]) - 1] // remove the ')'
+	funcParts[1] = funcParts[1][:len(funcParts[1])-1] // remove the ')'
 	return funcParts
 }
 
 func getNumberFromAlpha(alpha string) int {
-	sum := 0;
+	sum := 0
 	upperAlpha := strings.ToUpper(alpha)
 	la := utf8.RuneCountInString(upperAlpha)
 	for i := 0; i < la; i++ {
 		index := strings.Index(letters, string([]rune(upperAlpha)[i])) + 1
-		sum += index * int(math.Pow(26, float64((la - (i + 1)))))
+		sum += index * int(math.Pow(26, float64((la-(i+1)))))
 	}
 	return sum - 1
 }
@@ -92,7 +93,7 @@ func parseAlphaNumericParts(parts []string) (int, int) {
 		row = int(row64)
 	} else {
 		row64, err := strconv.ParseInt(parts[0], 0, 32)
-		if err != nil  {
+		if err != nil {
 			column = getNumberFromAlpha(parts[0])
 		} else {
 			row = int(row64)

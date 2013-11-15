@@ -9,9 +9,9 @@ type table struct {
 	node.INode
 	node.INodeFactory
 	node.ICommunicationHandler
-	children 								map[int]map[int]node.IChild
-	pendingRequests							map[string]chan node.IMessage
-	collectionChannel						chan *addToChildMessage
+	children          map[int]map[int]node.IChild
+	pendingRequests   map[string]chan node.IMessage
+	collectionChannel chan *addToChildMessage
 }
 
 func (t *table) OnMessageFromParent(msg node.IMessage) {
@@ -62,7 +62,7 @@ func (t *table) GetChild(coords node.ICoordinates) node.IChild {
 	msg := makeAddToChildMessage(original.CellLocation().Row(), original.CellLocation().Column(), "", nil)
 	t.collectionChannel <- msg
 
-	child := <- msg.returnChannel
+	child := <-msg.returnChannel
 	return child
 }
 
@@ -70,7 +70,7 @@ func (t *table) listenToCollection(ch chan *addToChildMessage) {
 	ch <- nil
 	for {
 		select {
-		case message := <- ch:
+		case message := <-ch:
 			if message.child == nil {
 				_, ok := t.children[message.row]
 				if !ok {
@@ -102,7 +102,7 @@ func (t *table) MakeChildNode(parentChannel node.IChild, childCoordinates node.I
 
 	msg := makeAddToChildMessage(loc.CellLocation().Row(), loc.CellLocation().Column(), "", parentChannel)
 	t.collectionChannel <- msg
-	<- msg.returnChannel
+	<-msg.returnChannel
 	close(msg.returnChannel)
 	return child
 }
@@ -112,7 +112,7 @@ func (t *table) getValueRangeByCellRange(ch chan node.IMessage, msg node.IMessag
 	if cr == nil {
 		go t.INode.Send(ch, node.MakeError(msg, nil))
 	}
-	go func (){
+	go func() {
 		loc, _ := t.INode.Coordinates().(ITableCoordinates)
 		vr := new(valuerange)
 		vr.Values = make(map[string]map[string]string)
@@ -136,7 +136,7 @@ func (t *table) getValueRangeByCellRange(ch chan node.IMessage, msg node.IMessag
 			}
 		}
 		for _, ch := range listeners {
-			message := <- ch
+			message := <-ch
 			cell := MakeCellFromBytes(message.Payload())
 			loc, _ = message.SourceCoordinates().(ITableCoordinates)
 			vr.Values[strconv.Itoa(loc.CellLocation().Row())][strconv.Itoa(loc.CellLocation().Column())] = cell.DisplayValue()
@@ -153,7 +153,7 @@ func MakeTable(parentChannel node.IChannel, coordinates, parentCoordinates node.
 	ch := make(chan *addToChildMessage)
 	t.collectionChannel = ch
 	go t.listenToCollection(t.collectionChannel)
-	<- t.collectionChannel
+	<-t.collectionChannel
 	// this is where we need to load and parse
 	t.INode = node.MakeNode(parentChannel, coordinates, parentCoordinates, t, t)
 	return t

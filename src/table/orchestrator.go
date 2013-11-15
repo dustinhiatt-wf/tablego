@@ -17,8 +17,8 @@ type orchestrator struct {
 	node.INode
 	node.INodeFactory
 	node.ICommunicationHandler
-	children map[string]node.IChild
-	collectionChannel						chan *addToChildMessage
+	children          map[string]node.IChild
+	collectionChannel chan *addToChildMessage
 }
 
 func (o *orchestrator) OnMessageFromParent(msg node.IMessage) {
@@ -41,7 +41,7 @@ func (o *orchestrator) listenToCollection(ch chan *addToChildMessage) {
 	ch <- nil
 	for {
 		select {
-		case message := <- ch:
+		case message := <-ch:
 			if message.child == nil {
 				child, ok := o.children[message.tableId]
 				if !ok {
@@ -61,7 +61,7 @@ func (o *orchestrator) GetChild(coords node.ICoordinates) node.IChild {
 	original, _ := coords.(ITableCoordinates)
 	msg := makeAddToChildMessage(0, 0, original.TableId(), nil)
 	o.collectionChannel <- msg
-	rsp := <- msg.returnChannel
+	rsp := <-msg.returnChannel
 	return rsp
 }
 
@@ -70,7 +70,7 @@ func (o *orchestrator) MakeChildNode(parentChannel node.IChild, childCoordinates
 	loc, _ := childCoordinates.(ITableCoordinates)
 	msg := makeAddToChildMessage(0, 0, loc.TableId(), parentChannel)
 	o.collectionChannel <- msg
-	<- msg.returnChannel
+	<-msg.returnChannel
 	return child
 }
 
@@ -80,7 +80,7 @@ func MakeOrchestrator() *orchestrator {
 	ch := make(chan *addToChildMessage)
 	o.collectionChannel = ch
 	go o.listenToCollection(ch)
-	<- ch //make sure the routine has started
+	<-ch //make sure the routine has started
 	o.INode = node.MakeNode(nil, MakeCoordinates("", nil), nil, o, o)
 	return o
 }

@@ -7,7 +7,6 @@
  */
 package table
 
-
 import (
 	"testing"
 )

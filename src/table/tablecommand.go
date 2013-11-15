@@ -15,9 +15,9 @@ import (
 /*
 This represents all the commands that can be sent to a table structure.  This
 is designed to go to and from JSON
- */
+*/
 type tablecommand struct {
-	Value				string
+	Value string
 }
 
 func (tc *tablecommand) ToBytes() []byte {
@@ -44,5 +44,4 @@ func MakeTableCommandFromJson(bytes []byte) *tablecommand {
 }
 
 type tableresponse struct {
-
 }
