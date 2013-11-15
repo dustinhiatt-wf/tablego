@@ -1,10 +1,3 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/5/13
- * Time: 3:54 PM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 import (
@@ -73,5 +66,50 @@ func TestOrchestratorRoutesToChild(t *testing.T) {
 	msg := <-tblCh.Channel().ParentToChild()
 	if msg.Operation() != "test" {
 		t.Error("Orchestrator did not forward message correctly.")
+	}
+}
+
+func TestOrchestratorSendCommand(t *testing.T) {
+	o := MakeOrchestrator()
+	cmd := node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	ch := node.MakeMessageChannel()
+	o.sendCommand(cmd, ch)
+	msg := <- ch
+	if msg.MessageId() != cmd.MessageId() {
+		t.Error("Cell not created correctly.")
+	}
+	cmd = node.MakeCommand(GetCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), nil)
+	o.sendCommand(cmd, ch)
+	msg = <- ch
+	c := MakeCellFromBytes(msg.Payload())
+	if c.DisplayValue() != "test" {
+		t.Error("Cell value not retrieved correctly.")
+	}
+}
+
+func TestSubscribeToOrchestrator(t *testing.T) {
+	o := MakeOrchestrator()
+	cr := MakeRange("A1:C3")
+	cr.TableId = "test"
+	values := node.MakeMessageChannel()
+	notifications := node.MakeMessageChannel()
+
+	o.subscribeToTableRange(cr, values, notifications)
+	msg := <- values
+
+	vr := MakeValueRangeFromBytes(msg.Payload())
+	if len(vr.Values) != 3 {
+		t.Error("Value range not returned correctly.")
+	}
+
+	ch := node.MakeMessageChannel()
+	o.sendCommand(node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes()), ch)
+	<-ch // cell updated
+
+	msg = <- notifications
+
+	c := MakeCellFromBytes(msg.Payload())
+	if c.DisplayValue() != "test" {
+		t.Error("Orchestrator not notified correctly.")
 	}
 }

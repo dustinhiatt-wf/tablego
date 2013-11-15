@@ -43,3 +43,16 @@ func TestTurnStringKeyedToIntKeyed(t *testing.T) {
 		t.Error("String map not converted to int map.")
 	}
 }
+
+func TestSumValueRange(t *testing.T) {
+	vr := new(valuerange)
+	vr.Values = make(map[string]map[string]string)
+	vr.Values["1"] = make(map[string]string)
+	vr.Values["2"] = make(map[string]string)
+	vr.Values["1"]["4"] = "5.5"
+	vr.Values["2"]["532"] = "7"
+	vr.Values["2"]["0"] = "test"
+	if vr.Sum() != "12.5" {
+		t.Error("Valuerange not summing correctly.")
+	}
+}

@@ -1,10 +1,3 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/4/13
- * Time: 9:00 PM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 import (
@@ -19,6 +12,25 @@ type tablerange struct {
 type valuerange struct {
 	ISerializable
 	Values map[string]map[string]string
+}
+
+func (vr *valuerange) Sum() string {
+	sum := 0.0
+	for row := range vr.Values {
+		for column := range vr.Values[row] {
+			value := vr.Values[row][column]
+			i, ok := strconv.ParseInt(value, 10, 64)
+			if ok == nil {
+				sum = sum + float64(i)
+				continue
+			}
+			f, ok := strconv.ParseFloat(value, 64)
+			if ok == nil {
+				sum = sum + f
+			}
+		}
+	}
+	return strconv.FormatFloat(sum, 'f', -1, 64)
 }
 
 func (vr *valuerange) ToBytes() []byte {

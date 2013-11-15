@@ -56,7 +56,14 @@ func (t *table) OnMessageFromChild(msg node.IMessage) {
 			close(ch)
 		}
 	} else if msg.GetType() == node.Command {
-
+		switch msg.Operation() {
+		case SubscribeToRange:
+			child := t.GetChild(msg.SourceCoordinates())
+			go t.subscribeToRange(child.Channel().ParentToChild(), msg)
+		case UnsubscribeToRange:
+			child := t.GetChild(msg.SourceCoordinates())
+			go t.unsubscribeToRange(child.Channel().ParentToChild(), msg)
+		}
 	} else {
 		//TODO: log error
 	}
@@ -176,6 +183,8 @@ func (t *table) subscribeToRange(ch chan node.IMessage, msg node.IMessage) {
 	if cr == nil {
 		go t.INode.Send(ch, node.MakeError(msg, nil))
 	}
+
+	subscriberLoc := msg.SourceCoordinates().(ITableCoordinates)
 	go func() {
 		loc, _ := t.INode.Coordinates().(ITableCoordinates)
 		vr := new(valuerange)
@@ -183,12 +192,17 @@ func (t *table) subscribeToRange(ch chan node.IMessage, msg node.IMessage) {
 		valListeners := make([]chan node.IMessage, 0)
 		for i := cr.StartRow; i < cr.StopRow; i++ {
 			for j := cr.StartColumn; j < cr.StopColumn; j++ {
+				if subscriberLoc.CellLocation() != nil {
+					if subscriberLoc.CellLocation().Row() == i && subscriberLoc.CellLocation().Column() == j {
+						continue
+					}
+				}
+
 				ch := node.MakeMessageChannel()
 				t.INode.GetOrCreateChild(ch, MakeCoordinates(loc.TableId(), MakeCellLocation(i, j)))
 				<-ch //cell definitely exists now
 				child := t.GetChild(MakeCoordinates(loc.TableId(), MakeCellLocation(i, j)))
 				var sp *subscribePayload
-				subscriberLoc := msg.SourceCoordinates().(ITableCoordinates)
 				if subscriberLoc.CellLocation() != nil {
 					sp = makeSubscribePayload(subscriberLoc.TableId(), subscriberLoc.CellLocation().Row(), subscriberLoc.CellLocation().Column(), true)
 				} else {
@@ -277,5 +291,6 @@ func MakeTable(parentChannel node.IChannel, coordinates, parentCoordinates node.
 	<-t.requestChannel
 	// this is where we need to load and parse
 	t.INode = node.MakeNode(parentChannel, coordinates, parentCoordinates, t, t)
+	t.INode.Initialize()
 	return t
 }

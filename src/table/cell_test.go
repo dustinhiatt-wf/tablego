@@ -116,6 +116,39 @@ func TestUpdateCellWithStaleData(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 }
 
+func TestParseFormulaIsNotAFormula(t *testing.T) {
+	chch := node.MakeIChild()
+	c := MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+
+	c.parseValue("test")
+	if c.isFormula == true {
+		t.Error("Formula not parsed correctly.")
+	}
+}
+
+func TestCellSubscribesWhenFormulaSet(t *testing.T) {
+	chch := node.MakeIChild()
+	vr := new(valuerange)
+	vr.Values = make(map[string]map[string]string)
+	vr.Values["1"] = make(map[string]string)
+	vr.Values["2"] = make(map[string]string)
+	vr.Values["1"]["4"] = "5.5"
+	vr.Values["2"]["532"] = "7"
+	vr.Values["2"]["0"] = "test"
+	var msg node.IMessage
+	go func () {
+		msg = <- chch.Channel().ChildToParent()
+		chch.Channel().ParentToChild() <- node.MakeResponse(msg, vr.ToBytes())
+
+
+	}()
+	MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "=sum(A1:C3)")
+	if msg.Operation() != SubscribeToRange {
+		t.Error("Cell did not subscribe to range of interest.")
+	}
+}
+
 /*
 func TestUpdateValueNotifyObservers(t *testing.T) {
 	cc := MakeCellChannel()

@@ -65,6 +65,7 @@ func makeNodeStub(parentChannel IChannel, coordinates, parentCoordinates ICoordi
 	ns := new(nodestub)
 	ns.INode = MakeNode(parentChannel, coordinates, parentCoordinates, ns, ns)
 	ns.children = make(map[string]IChild)
+	ns.INode.Initialize()
 	return ns
 }
 
@@ -93,7 +94,8 @@ func TestMakeNewNode(t *testing.T) {
 	pcoords := makeCoordinates("parent")
 	ccoords := makeCoordinates("child")
 	ch := makeIChannel()
-	MakeNode(ch, ccoords, pcoords, nil, nil)
+	node := MakeNode(ch, ccoords, pcoords, nil, nil)
+	node.Initialize()
 	message := <- ch.ChildToParent()
 	if message.Operation() != ChildInitialized {
 		t.Error("Child not initialized properly")

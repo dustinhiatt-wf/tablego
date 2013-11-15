@@ -3,6 +3,8 @@ package table
 import (
 	"encoding/json"
 	"node"
+	"strings"
+	"reflect"
 )
 
 type ICell interface {
@@ -17,11 +19,15 @@ type cell struct {
 	node.INode
 	node.ICommunicationHandler
 	node.INodeFactory
-	CellDisplayValue string
-	Value            string
-	LastUpdated      int
-	observers        *observers
-	pendingRequests  map[string]chan node.IMessage
+	CellDisplayValue 					string
+	Value            					string
+	LastUpdated      					int
+	observers        					*observers
+	pendingRequests  					map[string]chan node.IMessage
+	isFormula		 					bool
+	formulaValueRange					*valuerange
+	formulaRange						*cellrange
+	requestChannel	  					chan *addToPendingRequestsMessage
 }
 
 type cellValue struct {
@@ -75,14 +81,19 @@ func (c *cell) SetValue(value string, timestamp int) {
 		return
 	}
 	c.Value = value
-	c.CellDisplayValue = value
 	c.LastUpdated = timestamp
-	go c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes(), c.INode.Coordinates())
+	c.CellDisplayValue = c.parseValue(value)
+	c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes(), c.INode.Coordinates())
 }
 
 func (c *cell) OnMessageFromParent(msg node.IMessage) {
 	if msg.GetType() == node.Response {
-
+		ch, ok := c.pendingRequests[msg.MessageId()]
+		if ok {
+			c.INode.Send(ch, msg)
+			delete(c.pendingRequests, msg.MessageId())
+			close(ch)
+		}
 	} else if msg.GetType() == node.Command {
 		switch msg.Operation() {
 		case GetCellValue:
@@ -119,6 +130,26 @@ func (c *cell) OnMessageFromParent(msg node.IMessage) {
 	}
 }
 
+func (c *cell) listenToRequests(ch chan *addToPendingRequestsMessage) {
+	ch <- nil
+	for {
+		select {
+		case message := <-ch:
+			if message.channel == nil {
+				channel, ok := c.pendingRequests[message.id]
+				if !ok {
+					message.returnChannel <- nil
+					continue
+				}
+				message.returnChannel <- channel
+			} else {
+				c.pendingRequests[message.id] = message.channel
+				message.returnChannel <- message.channel
+			}
+		}
+	}
+}
+
 func (c *cell) OnMessageFromChild(msg node.IMessage) {
 	panic("Cells should not receive messages from children")
 }
@@ -140,12 +171,67 @@ func (c *cell) Unsubscribe(sp *subscribePayload) {
 	c.observers.removeObserver(sp)
 }
 
+func (c *cell) unsubscribeCellRange() {
+	if c.formulaRange == nil {
+		return
+	}
+
+	cmd := node.MakeCommand(UnsubscribeToRange, MakeCoordinates(c.formulaRange.TableId, nil), c.INode.Coordinates(), c.formulaRange.ToBytes())
+	go c.INode.Send(c.INode.Parent().ChildToParent(), cmd)
+}
+
+func (c *cell) sum(parts []string) string {
+	cr := MakeRange(parts[0])
+	loc, _ := c.INode.Coordinates().(ITableCoordinates)
+	if cr.TableId == "" {
+		cr.TableId = loc.TableId()
+	}
+	if !reflect.DeepEqual(cr, c.formulaRange) {
+		c.unsubscribeCellRange()
+		c.formulaRange = cr
+		cmd := node.MakeCommand(SubscribeToRange, MakeCoordinates(cr.TableId, nil), c.INode.Coordinates(), cr.ToBytes())
+		ch := node.MakeMessageChannel()
+		msg := makeAddToPendingRequestMessage(cmd.MessageId(), ch)
+		c.requestChannel <- msg
+		<- msg.returnChannel // waiting channel added
+		go c.INode.Send(c.INode.Parent().ChildToParent(), cmd)
+		resp := <- ch // we got our value range
+
+		vr := MakeValueRangeFromBytes(resp.ToBytes())
+		c.formulaValueRange = vr
+	}
+
+	return c.formulaValueRange.Sum()
+}
+
+func (c *cell) parseValue(value string) string {
+	if !strings.HasPrefix(value, "=") {
+		c.isFormula = false
+		return value
+	}
+	parts := parseFormula(value)
+	c.isFormula = true
+	result := value
+	switch strings.ToLower(parts[0]) {
+	case "sum":
+		result = c.sum(parts[1:])
+	}
+
+	return result
+}
+
 func MakeCell(parentChannel node.IChannel, coordinates, parentCoordinates node.ICoordinates, value string) *cell {
 	cell := new(cell)
 	cell.Value = value
-	cell.CellDisplayValue = value
 	cell.observers = MakeObservers()
 	cell.pendingRequests = make(map[string]chan node.IMessage)
 	cell.INode = node.MakeNode(parentChannel, coordinates, parentCoordinates, cell, cell)
+
+	reqCh := make(chan *addToPendingRequestsMessage)
+	cell.requestChannel = reqCh
+	go cell.listenToRequests(cell.requestChannel)
+	<-cell.requestChannel
+	cell.CellDisplayValue = cell.parseValue(value)
+	cell.INode.Initialize()
 	return cell
 }
