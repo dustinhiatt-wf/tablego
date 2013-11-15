@@ -36,12 +36,12 @@ type nodestub struct {
 	children		map[string]IChild
 }
 
-func (ns *nodestub) onMessageFromParent(msg IMessage) {
+func (ns *nodestub) OnMessageFromParent(msg IMessage) {
 	response := MakeResponse(msg, nil)
 	go ns.INode.Send(ns.INode.Parent().ChildToParent(), response)
 }
 
-func (ns *nodestub) onMessageFromChild(msg IMessage) {
+func (ns *nodestub) OnMessageFromChild(msg IMessage) {
 
 }
 
@@ -54,7 +54,7 @@ func (ns *nodestub) GetChild(coords ICoordinates) IChild {
 	return child
 }
 
-func (ns *nodestub) makeChildNode(parentChannel IChild, childCoordinates ICoordinates) INode {
+func (ns *nodestub) MakeChildNode(parentChannel IChild, childCoordinates ICoordinates) INode {
 	child := makeNodeStub(parentChannel.Channel(), childCoordinates, ns.INode.Coordinates())
 	loc, _ := childCoordinates.(ILocationCoordinates)
 	ns.children[loc.Location()] = parentChannel
@@ -171,8 +171,8 @@ func TestRoutingBetweenChildren(t *testing.T) {
 	ch := makeIChannel()
 	node := makeNodeStub(ch, ccoords, pcoords)
 	<- ch.ChildToParent() // initialized
-	node.children["test"] = makeIChild()
-	node.children["test2"] = makeIChild()
+	node.children["test"] = MakeIChild()
+	node.children["test2"] = MakeIChild()
 	go node.INode.listenToChild(node.children["test"])
 	node.children["test"].Channel().ChildToParent() <- MakeCommand("test", makeCoordinates("test2"), makeCoordinates("test"), nil)
 	message := <- node.children["test2"].Channel().ParentToChild()
