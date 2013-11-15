@@ -76,7 +76,7 @@ func (c *cell) SetValue(value string) {
 	}
 	c.Value = value
 	c.CellDisplayValue = value
-	go c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes())
+	go c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes(), c.INode.Coordinates())
 }
 
 func (c *cell) OnMessageFromParent(msg node.IMessage) {
@@ -96,6 +96,11 @@ func (c *cell) OnMessageFromParent(msg node.IMessage) {
 
 			tblCmd := MakeTableCommandFromJson(msg.Payload())
 			c.SetValue(tblCmd.Value)
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.Send(c.INode.Parent().ChildToParent(), resp)
+		case Subscribe:
+			sp := makeSubscribePayloadFromBytes(msg.Payload())
+			c.Subscribe(sp)
 			resp := node.MakeResponse(msg, c.ToBytes())
 			go c.Send(c.INode.Parent().ChildToParent(), resp)
 		default:
@@ -121,8 +126,8 @@ func (c *cell) makeChildNode(parentChannel node.IChild, childCoordinates node.IC
 	panic("Cells can't create children.")
 }
 
-func (c *cell) Subscribe(msg node.IMessage) {
-	c.observers.addObserver(msg)
+func (c *cell) Subscribe(sp *subscribePayload) {
+	c.observers.addObserver(sp)
 }
 
 func MakeCell(parentChannel node.IChannel, coordinates, parentCoordinates node.ICoordinates, value string) *cell {

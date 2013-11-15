@@ -2,6 +2,7 @@ package node
 
 import (
 	"time"
+	"encoding/json"
 )
 
 const (
@@ -24,49 +25,64 @@ type IMessage interface {
 	Equal(msg IMessage) 		bool
 	GetType()					string
 	Timestamp()					int
+	ToBytes()					[]byte
 }
 
 type message struct {
-	targetCoordinates	ICoordinates
-	sourceCoordinates	ICoordinates
-	operation			string
-	payload				[]byte
-	messageId			string
-	error				string
-	kind				string
-	timestamp			int
+	MTargetCoordinates	ICoordinates
+	MSourceCoordinates	ICoordinates
+	MOperation			string
+	MPayload			[]byte
+	MMessageId			string
+	MError				string
+	MKind				string
+	MTimestamp			int
+}
+
+func (m *message) ToBytes() []byte {
+	res, err := json.Marshal(m)
+	if err != nil {
+		return nil
+	}
+	return res
+}
+
+func MakeMessageFromBytes(bytes []byte) IMessage {
+	var m message
+	json.Unmarshal(bytes, m)
+	return &m
 }
 
 func (m *message) Operation() string {
-	return m.operation
+	return m.MOperation
 }
 
 func (m *message) Payload() []byte {
-	return m.payload
+	return m.MPayload
 }
 
 func (m *message) TargetCoordinates() ICoordinates {
-	return m.targetCoordinates
+	return m.MTargetCoordinates
 }
 
 func (m *message) SourceCoordinates() ICoordinates {
-	return m.sourceCoordinates
+	return m.MSourceCoordinates
 }
 
 func (m *message) MessageId() string {
-	return m.messageId
+	return m.MMessageId
 }
 
 func (m *message) Error() string {
-	return m.error
+	return m.MError
 }
 
 func (m *message) GetType() string {
-	return m.kind
+	return m.MKind
 }
 
 func (m *message) Timestamp() int {
-	return m.timestamp
+	return m.MTimestamp
 }
 
 func (m *message) Equal(msg IMessage) bool {
@@ -75,11 +91,11 @@ func (m *message) Equal(msg IMessage) bool {
 
 func makeMessage(operation string, targetCoordinates, sourceCoordinates ICoordinates, payload []byte) *message {
 	msg := new(message)
-	msg.timestamp = time.Now().Nanosecond()
-	msg.operation = operation
-	msg.targetCoordinates = targetCoordinates
-	msg.sourceCoordinates = sourceCoordinates
-	msg.payload = payload
+	msg.MTimestamp = time.Now().Nanosecond()
+	msg.MOperation = operation
+	msg.MTargetCoordinates = targetCoordinates
+	msg.MSourceCoordinates = sourceCoordinates
+	msg.MPayload = payload
 	return msg
 }
 
@@ -89,8 +105,8 @@ func MakeMessageChannel() chan IMessage {
 
 func MakeCommand(operation string, destination, source ICoordinates, payload []byte) IMessage {
 	message := makeMessage(operation, destination, source, payload)
-	message.messageId = GenUUID()
-	message.kind = Command
+	message.MMessageId = GenUUID()
+	message.MKind = Command
 	return message
 }
 
@@ -99,14 +115,14 @@ func MakeResponse(msg IMessage, payload []byte) IMessage {
 		panic("Cannot create response from non-command.")
 	}
 	message := makeMessage(msg.Operation(), msg.SourceCoordinates(), msg.TargetCoordinates(), payload)
-	message.messageId = msg.MessageId()
-	message.kind = Response
+	message.MMessageId = msg.MessageId()
+	message.MKind = Response
 	return message
 }
 
 func MakeError(msg IMessage, payload []byte) IMessage {
 	message := makeMessage(msg.Operation(), msg.SourceCoordinates(), msg.TargetCoordinates(), payload)
-	message.messageId = msg.MessageId()
-	message.kind = Error
+	message.MMessageId = msg.MessageId()
+	message.MKind = Error
 	return message
 }

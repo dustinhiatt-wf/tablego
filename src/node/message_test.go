@@ -40,3 +40,14 @@ func TestMakeResult(t *testing.T) {
 	}
 }
 
+/*
+func TestMessageMarshal(t *testing.T) {
+	msg := makeMessage("test", makeCoordinates("test"), makeCoordinates("test"), make([]byte, 0))
+	bytes := msg.ToBytes()
+	log.Println(bytes)
+	res := MakeMessageFromBytes(bytes)
+	log.Println(res.TargetCoordinates())
+	if !reflect.DeepEqual(msg, res) {
+		t.Error("IMessage couldn't be marshaled and unmarshaled.")
+	}
+}*/

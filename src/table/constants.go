@@ -18,4 +18,5 @@ const (
 	CloseTable           = "closeTable"
 	GetCellValue         = "getCellValue"
 	Subscribe            = "subscribe"
+	SubscribeToRange	 = "subscribeToRange"
 )

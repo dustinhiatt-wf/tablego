@@ -12,6 +12,7 @@ type table struct {
 	children          map[int]map[int]node.IChild
 	pendingRequests   map[string]chan node.IMessage
 	collectionChannel chan *addToChildMessage
+	requestChannel	  chan *addToPendingRequestsMessage
 }
 
 func (t *table) OnMessageFromParent(msg node.IMessage) {
@@ -21,6 +22,8 @@ func (t *table) OnMessageFromParent(msg node.IMessage) {
 		switch msg.Operation() {
 		case GetValueRange:
 			go t.getValueRangeByCellRange(t.INode.Parent().ChildToParent(), msg)
+		case SubscribeToRange:
+			go t.subscribeToRange(t.INode.Parent().ChildToParent(), msg)
 		default:
 			resp := node.MakeResponse(msg, nil)
 			go t.INode.Send(t.INode.Parent().ChildToParent(), resp)
@@ -96,6 +99,26 @@ func (t *table) listenToCollection(ch chan *addToChildMessage) {
 	}
 }
 
+func (t *table) listenToRequests(ch chan *addToPendingRequestsMessage) {
+	ch <- nil
+	for {
+		select {
+		case message := <-ch:
+			if message.channel == nil {
+				channel, ok := t.pendingRequests[message.id]
+				if !ok {
+					message.returnChannel <- nil
+					continue
+				}
+				message.returnChannel <- channel
+			} else {
+				t.pendingRequests[message.id] = message.channel
+				message.returnChannel <- message.channel
+			}
+		}
+	}
+}
+
 func (t *table) MakeChildNode(parentChannel node.IChild, childCoordinates node.ICoordinates) node.INode {
 	child := MakeCell(parentChannel.Channel(), childCoordinates, t.INode.Coordinates(), "")
 	loc, _ := childCoordinates.(ITableCoordinates)
@@ -146,6 +169,54 @@ func (t *table) getValueRangeByCellRange(ch chan node.IMessage, msg node.IMessag
 	}()
 }
 
+func (t *table) subscribeToRange(ch chan node.IMessage, msg node.IMessage) {
+	cr := MakeRangeFromBytes(msg.Payload())
+	if cr == nil {
+		go t.INode.Send(ch, node.MakeError(msg, nil))
+	}
+	go func() {
+		loc, _ := t.INode.Coordinates().(ITableCoordinates)
+		vr := new(valuerange)
+		vr.Values = make(map[string]map[string]string)
+		valListeners := make([]chan node.IMessage, 0)
+		for i := cr.StartRow; i < cr.StopRow; i++ {
+			for j := cr.StartColumn; j < cr.StopColumn; j++ {
+				ch := node.MakeMessageChannel()
+				t.INode.GetOrCreateChild(ch, MakeCoordinates(loc.TableId(), MakeCellLocation(i, j)))
+				<-ch //cell definitely exists now
+				child := t.GetChild(MakeCoordinates(loc.TableId(), MakeCellLocation(i, j)))
+				var sp *subscribePayload
+				subscriberLoc := msg.SourceCoordinates().(ITableCoordinates)
+				if subscriberLoc.CellLocation() != nil {
+					sp = makeSubscribePayload(subscriberLoc.TableId(), subscriberLoc.CellLocation().Row(), subscriberLoc.CellLocation().Column(), true)
+				} else {
+					sp = makeSubscribePayload(subscriberLoc.TableId(), -1, -1, false)
+				}
+				cmd := node.MakeCommand(Subscribe, MakeCoordinates(loc.TableId(), MakeCellLocation(i, j)), t.INode.Coordinates(), sp.ToBytes())
+				ch = node.MakeMessageChannel()
+				req := makeAddToPendingRequestMessage(cmd.MessageId(), ch)
+				t.requestChannel <-req
+				<-req.returnChannel
+				valListeners = append(valListeners, ch)
+				go t.INode.Send(child.Channel().ParentToChild(), cmd)
+			}
+		}
+
+		for _, ch := range valListeners {
+			resp := <-ch
+			cellLoc, _ := resp.SourceCoordinates().(ITableCoordinates)
+			_, ok := vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())]
+			if !ok {
+				vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())] = make(map[string]string)
+			}
+			cell := MakeCellFromBytes(resp.Payload())
+			vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())][strconv.Itoa(cellLoc.CellLocation().Column())] = cell.DisplayValue()
+		}
+
+		ch <- node.MakeResponse(msg, vr.ToBytes())
+	}()
+}
+
 func MakeTable(parentChannel node.IChannel, coordinates, parentCoordinates node.ICoordinates) *table {
 	t := new(table)
 	t.children = make(map[int]map[int]node.IChild)
@@ -154,6 +225,10 @@ func MakeTable(parentChannel node.IChannel, coordinates, parentCoordinates node.
 	t.collectionChannel = ch
 	go t.listenToCollection(t.collectionChannel)
 	<-t.collectionChannel
+	reqCh := make(chan *addToPendingRequestsMessage)
+	t.requestChannel = reqCh
+	go t.listenToRequests(t.requestChannel)
+	<-t.requestChannel
 	// this is where we need to load and parse
 	t.INode = node.MakeNode(parentChannel, coordinates, parentCoordinates, t, t)
 	return t

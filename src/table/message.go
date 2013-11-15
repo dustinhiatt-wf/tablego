@@ -100,3 +100,17 @@ func makeAddToChildMessage(row, column int, tableId string, child node.IChild) *
 	atcm.returnChannel = make(chan node.IChild)
 	return atcm
 }
+
+type addToPendingRequestsMessage struct {
+	id				string
+	channel 		chan node.IMessage
+	returnChannel 	chan chan node.IMessage
+}
+
+func makeAddToPendingRequestMessage(id string, channel chan node.IMessage) *addToPendingRequestsMessage {
+	msg := new(addToPendingRequestsMessage)
+	msg.id = id
+	msg.channel = channel
+	msg.returnChannel = make(chan chan node.IMessage)
+	return msg
+}

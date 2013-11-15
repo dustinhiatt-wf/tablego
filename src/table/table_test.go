@@ -1,9 +1,7 @@
 package table
 
 import (
-	"log"
 	"node"
-	"runtime"
 	"testing"
 )
 
@@ -45,7 +43,6 @@ func TestForwardsToCells(t *testing.T) {
 }
 
 func TestGetValueRange(t *testing.T) {
-	runtime.GOMAXPROCS(runtime.NumCPU())
 	child := node.MakeIChild()
 	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
 	<-child.Channel().ChildToParent() //table initialized
@@ -64,7 +61,6 @@ func TestGetValueRange(t *testing.T) {
 }
 
 func TestGetMultipleValueRange(t *testing.T) {
-	log.Println(runtime.GOMAXPROCS(runtime.NumCPU()))
 	child := node.MakeIChild()
 	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
 	<-child.Channel().ChildToParent() // cell's value set
@@ -88,8 +84,58 @@ func TestGetMultipleValueRange(t *testing.T) {
 	}
 }
 
+func TestSubscribeToRange(t *testing.T) {
+	child := node.MakeIChild()
+	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<-child.Channel().ChildToParent() //table initialized
+	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	<-child.Channel().ChildToParent() // cell's value set
+	cr := MakeRange("A1:C3")
+
+	child.Channel().ParentToChild() <- node.MakeCommand(SubscribeToRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	msg := <-child.Channel().ChildToParent()
+	vr := MakeValueRangeFromBytes(msg.Payload())
+	if vr.Values["1"]["1"] != "test" {
+		t.Error("Value range not returned from subscribe correctly.")
+	}
+}
+
+func TestSubscribeToRangeWithMultipleValues(t *testing.T) {
+	child := node.MakeIChild()
+	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<-child.Channel().ChildToParent() //table initialized
+	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 2)), MakeCoordinates("", nil), MakeTableCommand("test2").ToBytes())
+	<-child.Channel().ChildToParent()
+	<-child.Channel().ChildToParent() // cell's value set
+	cr := MakeRange("A1:C3")
+
+	child.Channel().ParentToChild() <- node.MakeCommand(SubscribeToRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	msg := <-child.Channel().ChildToParent()
+	vr := MakeValueRangeFromBytes(msg.Payload())
+	if vr.Values["1"]["1"] != "test" {
+		t.Error("Value range not returned correctly.")
+	} else if vr.Values["1"]["2"] != "test2" {
+		t.Error("Value range not returned correctly.")
+	}
+}
+
+func TestSubscribeToRangeNotifiesOnBlankUpdate(t *testing.T) {
+	child := node.MakeIChild()
+	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<-child.Channel().ChildToParent() //table initialized
+	cr := MakeRange("A1:C3")
+
+	child.Channel().ParentToChild() <- node.MakeCommand(SubscribeToRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	<-child.Channel().ChildToParent()
+
+	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+
+	<- child.Channel().ChildToParent() // one of these lets me know the cell was edited and the other lets me know that we
+	<- child.Channel().ChildToParent() // received a subscription notification
+}
+
 func BenchmarkAddAndGetCells(b *testing.B) {
-	log.Println(runtime.GOMAXPROCS(1))
 	child := node.MakeIChild()
 	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
 	<-child.Channel().ChildToParent() // cell's value set
