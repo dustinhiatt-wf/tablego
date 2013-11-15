@@ -9,13 +9,14 @@ const (
 )
 
 type ICommunicationHandler interface {
-	onMessageFromParent(msg IMessage)
-	onMessageFromChild(msg IMessage)
+	OnMessageFromParent(msg IMessage)
+	OnMessageFromChild(msg IMessage)
 }
 
 type INodeFactory interface {
 	GetChild(coords ICoordinates) 											IChild
-	makeChildNode(parentChannel IChild, childCoordinates ICoordinates) 	INode
+	MakeChildNode(parentChannel IChild, childCoordinates ICoordinates) 		INode
+	DumpInformation(c ICoordinates)											string
 }
 
 type IChild interface {
@@ -23,7 +24,7 @@ type IChild interface {
 	IsInitialized()										bool
 	PendingRequests()									map[string]isubscribers
 	subscribe(operation string, ch chan IMessage)
-	sendNotification(operation string, message IMessage)
+	SendNotification(operation string, message IMessage)
 	setInitialized(value bool)
 }
 
@@ -50,7 +51,7 @@ func (c *child) subscribe(operation string, ch chan IMessage) {
 	subs.append(ch)
 }
 
-func (c *child) sendNotification(operation string, message IMessage) {
+func (c *child) SendNotification(operation string, message IMessage) {
 	subs, ok := c.childPendingRequests[operation]
 	if ok {
 		subs.notifySubscribers(message, true)
@@ -69,7 +70,7 @@ func (c *child) IsInitialized() bool {
 	return c.isInitialized
 }
 
-func makeIChild() IChild {
+func MakeIChild() IChild {
 	child := new(child)
 	child.channel = makeIChannel()
 	child.isInitialized = false // not necessary, but verbose
@@ -111,7 +112,7 @@ type INode interface {
 	isOwnCoordinates(coords ICoordinates)							bool
 	isMessageIntendedForMe(msg IMessage)							bool
 	isMessageIntendedForParent(msg IMessage)						bool
-	send(ch chan IMessage, msg IMessage)
+	Send(ch chan IMessage, msg IMessage)
 	listenToParent(parentChannel IChannel)
 	Coordinates()													ICoordinates
 	ParentCoordinates()												ICoordinates
@@ -142,6 +143,8 @@ func (n *Node) Parent() IChannel {
 func (n *Node) isMessageIntendedForParent(msg IMessage) bool {
 	if n.ParentCoordinates() == nil && msg.TargetCoordinates() == nil {
 		return true
+	} else if n.ParentCoordinates() == nil && msg.TargetCoordinates() != nil {
+		return false
 	}
 	if n.ParentCoordinates().Equal(msg.TargetCoordinates()) {
 		return true
@@ -154,21 +157,21 @@ func (n *Node) listenToChild(child IChild) {
 		select {
 		case message := <- child.Channel().ChildToParent():
 			if n.isMessageIntendedForParent(message) {
-				go n.send(n.Parent().ChildToParent(), message)
+				go n.Send(n.Parent().ChildToParent(), message)
 				continue
 			} else if !n.isMessageIntendedForMe(message) {
 				child := n.nodeFactory.GetChild(message.TargetCoordinates())
 				if child != nil {
-					go n.send(child.Channel().ParentToChild(), message)
+					go n.Send(child.Channel().ParentToChild(), message)
 				}
 				continue
 			}
 
 			if message.Operation() == ChildInitialized {
 				child.setInitialized(true)
-				go child.sendNotification(ChildInitialized, message)
+				go child.SendNotification(ChildInitialized, message)
 			} else {
-				go n.communicationHandler.onMessageFromChild(message)
+				go n.communicationHandler.OnMessageFromChild(message)
 			}
 		}
 	}
@@ -183,14 +186,17 @@ func (n *Node) listenToParent(parentChannel IChannel) {
 		select {
 		case message := <- parentChannel.ParentToChild():
 			if !n.isMessageIntendedForMe(message) {
-				child := n.nodeFactory.GetChild(message.TargetCoordinates())
-				if child != nil {
-					go n.send(child.Channel().ParentToChild(), message)
-				}
+				go func () {
+					ch := MakeMessageChannel()
+					n.GetOrCreateChild(ch, message.TargetCoordinates())
+					<- ch // child initialized
+					child := n.nodeFactory.GetChild(message.TargetCoordinates())
+					child.Channel().ParentToChild() <- message
+				}()
 				continue
 			}
 
-			go n.communicationHandler.onMessageFromParent(message)
+			go n.communicationHandler.OnMessageFromParent(message)
 		}
 	}
 }
@@ -198,11 +204,11 @@ func (n *Node) listenToParent(parentChannel IChannel) {
 func (n *Node) initialize() {
 	go n.listenToParent(n.parent)
 	if n.parent != nil {
-		go n.send(n.parent.ChildToParent(), MakeCommand(ChildInitialized, n.ParentCoordinates(), n.Coordinates(), nil))
+		go n.Send(n.parent.ChildToParent(), MakeCommand(ChildInitialized, n.ParentCoordinates(), n.Coordinates(), nil))
 	}
 }
 
-func (n *Node) send(ch chan IMessage, msg IMessage) {
+func (n *Node) Send(ch chan IMessage, msg IMessage) {
 	ch <- msg
 }
 
@@ -215,16 +221,16 @@ func (n *Node) isMessageIntendedForMe(msg IMessage) bool {
 }
 
 func (n *Node) createChild(observer chan IMessage, coords ICoordinates) {
-	child := makeIChild()
+	child := MakeIChild()
 	child.subscribe(ChildInitialized, observer)
+	n.nodeFactory.MakeChildNode(child, coords)
 	go n.listenToChild(child)
-	go n.nodeFactory.makeChildNode(child, coords)
 }
 
 func (n *Node) GetOrCreateChild(observer chan IMessage, coords ICoordinates) {
 	child := n.nodeFactory.GetChild(coords)
 	if child == nil {
-		go n.createChild(observer, coords)
+		n.createChild(observer, coords)
 	} else if !child.IsInitialized() { //currently being loaded
 		child.subscribe(ChildInitialized, observer)
 	} else { // table is loaded and ready

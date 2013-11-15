@@ -22,7 +22,7 @@ type ITableCoordinates interface {
 }
 
 type coordinates struct {
-	node.ICoordinates
+	ITableCoordinates
 	tableId				string
 	cellLocation		ICellLocation
 }
@@ -31,8 +31,18 @@ func (c *coordinates) Equal(other node.ICoordinates) bool {
 	o := other.(ITableCoordinates)
 	if c.cellLocation == nil && o.CellLocation() != nil {
 		return false
+	} else if c.cellLocation == nil && o.CellLocation() == nil {
+		return c.tableId == o.TableId()
 	}
 	return c.tableId == o.TableId() && c.cellLocation.Equal(o.CellLocation())
+}
+
+func (c *coordinates) CellLocation() ICellLocation {
+	return c.cellLocation
+}
+
+func (c *coordinates) TableId() string {
+	return c.tableId
 }
 
 type ICellLocation interface {
@@ -71,4 +81,22 @@ func MakeCoordinates(tableId string, cellLocation ICellLocation) node.ICoordinat
 	c.tableId = tableId
 	c.cellLocation = cellLocation
 	return c
+}
+
+type addToChildMessage struct {
+	row				int
+	column			int
+	tableId			string
+	child			node.IChild
+	returnChannel	chan node.IChild
+}
+
+func makeAddToChildMessage(row, column int, tableId string, child node.IChild) *addToChildMessage {
+	atcm := new(addToChildMessage)
+	atcm.row = row
+	atcm.column = column
+	atcm.child = child
+	atcm.tableId = tableId
+	atcm.returnChannel = make(chan node.IChild)
+	return atcm
 }

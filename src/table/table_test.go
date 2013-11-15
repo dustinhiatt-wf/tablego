@@ -1,138 +1,117 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/4/13
- * Time: 11:25 AM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 
 import (
 	"testing"
-	"time"
+	"node"
+	"runtime"
+	"log"
 )
 
 func TestCreateTable(t *testing.T) {
-	ch := MakeTableOrchestratorChannel()
-	table := MakeTable("test", ch)
-	<- ch.tableToOrchestrator // table created
-	if table.cells == nil {
-		t.Error("Table cells not initialized.")
+	child := node.MakeIChild()
+	table := MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<- child.Channel().ChildToParent() // table created
+	if table.children == nil {
+		t.Error("Table not created correctly.")
+	}
+}
+
+func TestTableCreatesCell(t *testing.T) {
+	child := node.MakeIChild()
+	table := MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<- child.Channel().ChildToParent() // table initialized
+	child.Channel().ParentToChild() <- node.MakeCommand("test", MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), nil)
+	message := <- child.Channel().ChildToParent()
+	if message.Operation() != "test" {
+		t.Error("Cell not created correctly.")
+	} else if len(table.children) != 1 {
+		t.Error("Cell not cached correctly.")
+	}
+}
+
+func TestForwardsToCells(t *testing.T) {
+	child := node.MakeIChild()
+	table := MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<- child.Channel().ChildToParent() //table initialized
+	child.Channel().ParentToChild() <- node.MakeCommand("test", MakeCoordinates("test", MakeCellLocation(1, 1,)), MakeCoordinates("", nil), nil)
+	<- child.Channel().ChildToParent() // cell initialized
+	cellChild := node.MakeIChild()
+	table.children[1][2] = cellChild
+	table.children[1][1].Channel().ChildToParent() <- node.MakeCommand("test", MakeCoordinates("test", MakeCellLocation(1, 2)), MakeCoordinates("test", MakeCellLocation(1, 1)), nil)
+	msg := <- cellChild.Channel().ParentToChild()
+	if msg.Operation() != "test" {
+		t.Error("Table not forwarding to cells correctly.")
 	}
 }
 
 func TestGetValueRange(t *testing.T) {
-	ch := MakeTableOrchestratorChannel()
-	MakeTable("test", ch)
-	<- ch.tableToOrchestrator
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	child := node.MakeIChild()
+	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<- child.Channel().ChildToParent() //table initialized
+	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	<- child.Channel().ChildToParent() // cell's value set
 	cr := MakeRange("A1:C3")
-	ch.orchestratorToTable <- MakeCommand(GetValueRange, "test", "", nil, nil, cr.ToBytes())
-	message := <- ch.tableToOrchestrator
-	if message.Payload() == nil {
+
+	child.Channel().ParentToChild() <- node.MakeCommand(GetValueRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	message := <- child.Channel().ChildToParent()
+
+	vr := MakeValueRangeFromBytes(message.Payload())
+
+	if vr.Values["1"]["1"] != "test" {
 		t.Error("Value range not returned correctly.")
 	}
 }
 
-
-func TestEditValueAtPosition(t *testing.T) {
-	ch := MakeTableOrchestratorChannel()
-	table := MakeTable("test", ch)
-	<- ch.tableToOrchestrator
-	msgCh := MakeMessageChannel()
-	table.editCellValue(MakeCommand(EditCellValue, "test", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test").ToBytes()), msgCh)
-	message := <- msgCh
-	c := MakeCellFromBytes(message.Payload())
-	if c.Value != "test" {
-		t.Error("Value not set correctly.")
+func TestGetMultipleValueRange(t *testing.T) {
+	log.Println(runtime.GOMAXPROCS(runtime.NumCPU()))
+	child := node.MakeIChild()
+	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<- child.Channel().ChildToParent() // cell's value set
+	for i := 0; i < 100; i++ {
+		child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(i, 0)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
 	}
-}
+	for i := 0; i < 100; i++ {
+		<- child.Channel().ChildToParent()
+	}
+	cr := new(cellrange)
+	cr.StartRow = 0
+	cr.StopRow = 101
+	cr.StartColumn = 0
+	cr.StopColumn = 1
+	child.Channel().ParentToChild() <- node.MakeCommand(GetValueRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	message := <- child.Channel().ChildToParent()
 
-func TestGetValueExists(t *testing.T) {
-	orCh := MakeTableOrchestratorChannel()
-	table := MakeTable("test", orCh)
-	<- orCh.tableToOrchestrator
-	ch := MakeMessageChannel()
-	table.editCellValue(MakeCommand(EditCellValue, "test", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test").ToBytes()), ch)
-	<- ch
-	ch = MakeMessageChannel()
-	cr := MakeRange("A1:C3")
-	cmd := MakeCommand(GetValueRange, "test", "", nil, nil, cr.ToBytes())
-	table.getValueRangeByCellRange(cmd, ch)
-	message := <- ch
 	vr := MakeValueRangeFromBytes(message.Payload())
-	if vr.Values["1"]["1"] != "test" {
-		t.Error("Range after update not working correctly.")
+	if len(vr.Values) != 100 {
+		t.Error("Wrong value range size")
 	}
 }
 
-func TestEditExistingValue(t *testing.T) {
-	orCh := MakeTableOrchestratorChannel()
-	table := MakeTable("test", orCh)
-	<- orCh.tableToOrchestrator
-	ch := MakeMessageChannel()
-	table.editCellValue(MakeCommand(EditCellValue, "test", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test").ToBytes()), ch)
-	<- ch
-	table.editCellValue(MakeCommand(EditCellValue, "test", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test2").ToBytes()), ch)
-	message := <-ch
-	cell := MakeCellFromBytes(message.Payload())
-	if cell.Value != "test2" {
-		t.Error("Existing values not updated correctly.")
+func BenchmarkAddAndGetCells(b *testing.B) {
+	log.Println(runtime.GOMAXPROCS(1))
+	child := node.MakeIChild()
+	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<- child.Channel().ChildToParent() // cell's value set
+	for i := 0; i < b.N; i++ {
+		child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(i, 0)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
 	}
-}
-
-func TestDoNotRespondToResponse(t *testing.T) {
-	orCh := MakeTableOrchestratorChannel()
-	MakeTable("test", orCh)
-	cmd := MakeCommand("test", "test", "", nil, nil, nil)
-	orCh.orchestratorToTable <- MakeResponse(cmd, nil)
-	message := <- orCh.tableToOrchestrator // table opened
-	go func() {
-		message = <- orCh.tableToOrchestrator
-		t.Error("We got a message from a response.")
-	}()
-	time.Sleep(20 * time.Millisecond) // I don't care for this method of checking, but it'll have to do until I can think of something better
-}
-
-func TestForwardFromCell(t *testing.T) {
-	orCh := MakeTableOrchestratorChannel()
-	table := MakeTable("test", orCh)
-	<- orCh.tableToOrchestrator // table created
-	ch := MakeMessageChannel()
-	table.createCell(1, 1, "test", ch)
-	<- ch // cell created
-	table.cells[1][1].channel.cellToTable <- MakeCommand("test", "test2", "test", MakeCellLocation(1, 1), MakeCellLocation(1, 1), nil)
-	message := <- orCh.tableToOrchestrator
-	if message.TargetTable() != "test2" {
-		t.Error("Message from cell not forwarded correctly.")
+	for i := 0; i < b.N; i++ {
+		<- child.Channel().ChildToParent()
 	}
-}
+	cr := new(cellrange)
+	cr.StartRow = 0
+	cr.StopRow = b.N + 1
+	cr.StartColumn = 0
+	cr.StopColumn = 1
+	b.ResetTimer()
+	child.Channel().ParentToChild() <- node.MakeCommand(GetValueRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	message := <- child.Channel().ChildToParent()
 
-func TestForwardCommandToCell(t *testing.T) {
-	orCh := MakeTableOrchestratorChannel()
-	table := MakeTable("test", orCh)
-	<- orCh.tableToOrchestrator // table created
-	table.cells[1] = make(map[int]*cellChannel)
-	table.cells[1][1] = MakeCellChannel()
-	table.cells[1][1].cellInitialized = true
-	orCh.orchestratorToTable <- MakeCommand("test", "test", "", MakeCellLocation(1, 1), nil, nil)
-	message := <- table.cells[1][1].channel.tableToCell
-	if message.Operation() != "test" {
-		t.Error("Message not forwarded to cell correctly.")
-	}
-}
-
-func TestForwardCommandToOrchestrator(t *testing.T) {
-	orCh := MakeTableOrchestratorChannel()
-	table := MakeTable("test", orCh)
-	<- orCh.tableToOrchestrator //table created
-	ch := MakeMessageChannel()
-	table.createCell(1, 1, "", ch)
-	<- ch
-	table.cells[1][1].channel.cellToTable <- MakeCommand("test", "test2", "", nil, nil, nil)
-	message := <- orCh.tableToOrchestrator
-	if message.Operation() != "test" {
-		t.Error("Message not forwarded to orchestrator from cell.")
+	vr := MakeValueRangeFromBytes(message.Payload())
+	if len(vr.Values) != b.N {
+		b.Error("Wrong value range size")
 	}
 }
 

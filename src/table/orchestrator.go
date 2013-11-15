@@ -18,17 +18,18 @@ type orchestrator struct {
 	node.INodeFactory
 	node.ICommunicationHandler
 	children map[string]node.IChild
+	collectionChannel						chan *addToChildMessage
 }
 
-func (o *orchestrator) onMessageFromParent(msg IMessage) {
+func (o *orchestrator) OnMessageFromParent(msg node.IMessage) {
 	panic("An orchestrator should't get a message from a parent.")
 }
 
-func (o *orchestrator) onMessageFromChild(msg IMessage) {
+func (o *orchestrator) OnMessageFromChild(msg node.IMessage) {
 	if msg.GetType() == node.Response {
 		loc, _ := msg.SourceCoordinates().(ITableCoordinates)
 		child, _ := o.children[loc.TableId()]
-		go child.sendNotification(msg.MessageId(), msg)
+		go child.SendNotification(msg.MessageId(), msg)
 	} else if msg.GetType() == node.Command {
 		panic("Orchestrator got a command.")
 	} else {
@@ -36,25 +37,50 @@ func (o *orchestrator) onMessageFromChild(msg IMessage) {
 	}
 }
 
-func (o *orchestrator) GetChild(coords ICoordinates) IChild {
-	original, _ := coords.(ITableCoordinates)
-	child, ok := o.children[original.TableId()]
-	if !ok {
-		return nil
+func (o *orchestrator) listenToCollection(ch chan *addToChildMessage) {
+	ch <- nil
+	for {
+		select {
+		case message := <- ch:
+			if message.child == nil {
+				child, ok := o.children[message.tableId]
+				if !ok {
+					message.returnChannel <- nil
+					continue
+				}
+				message.returnChannel <- child
+			} else {
+				o.children[message.tableId] = message.child
+				message.returnChannel <- message.child
+			}
+		}
 	}
-	return child
 }
 
-func (o *orchestrator) makeChildNode(parentChannel IChild, childCoordinates ICoordinates) INode {
-	child := MakeTable(parentChannel, childCoordinates, o.INode.Coordinates())
+func (o *orchestrator) GetChild(coords node.ICoordinates) node.IChild {
+	original, _ := coords.(ITableCoordinates)
+	msg := makeAddToChildMessage(0, 0, original.TableId(), nil)
+	o.collectionChannel <- msg
+	rsp := <- msg.returnChannel
+	return rsp
+}
+
+func (o *orchestrator) MakeChildNode(parentChannel node.IChild, childCoordinates node.ICoordinates) node.INode {
+	child := MakeTable(parentChannel.Channel(), childCoordinates, o.INode.Coordinates())
 	loc, _ := childCoordinates.(ITableCoordinates)
-	o.children[loc.TableId()] = parentChannel
+	msg := makeAddToChildMessage(0, 0, loc.TableId(), parentChannel)
+	o.collectionChannel <- msg
+	<- msg.returnChannel
 	return child
 }
 
 func MakeOrchestrator() *orchestrator {
 	o := new(orchestrator)
 	o.children = make(map[string]node.IChild)
+	ch := make(chan *addToChildMessage)
+	o.collectionChannel = ch
+	go o.listenToCollection(ch)
+	<- ch //make sure the routine has started
 	o.INode = node.MakeNode(nil, MakeCoordinates("", nil), nil, o, o)
 	return o
 }

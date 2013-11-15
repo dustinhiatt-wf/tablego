@@ -9,190 +9,69 @@ package table
 
 import (
 	"testing"
+	"node"
 )
 
-func TestOrchestratorCachesTable(t *testing.T) {
+func TestCreateOrchestrator(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeMessageChannel()
-	o.GetTableById("test", ch)
-	if len(o.tables) != 1 {
-		t.Error("Table not cached correctly.")
+	if o.INode.Parent() != nil {
+		t.Error("Orchestrator created with parent.")
 	}
-	o.GetTableById("test", ch)
-	if len(o.tables) != 1 {
-		t.Error("Table cached twice.")
+	coords := MakeCoordinates("", nil)
+
+	if !o.INode.Coordinates().Equal(coords) {
+		t.Error("Orchestrator created with wrong coordinates.")
+	}
+	if o.INode.ParentCoordinates() != nil {
+		t.Error("Orchestrator created with parent coordinates.")
 	}
 }
 
-func TestOrchestratorCanRemoveTable(t *testing.T) {
+func TestCreateChildTable(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeMessageChannel()
-	o.GetTableById("test", ch)
-	removeTable(o, "test")
-	_, ok := o.tables["test"]
-	if ok == true {
-		t.Error("Table not removed correctly.")
+	ch := node.MakeMessageChannel()
+	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
+	<- ch //table initialized
+	if len(o.children) != 1 {
+		t.Error("Child table not created.")
 	}
 }
 
-func TestCheckTableLoaded(t *testing.T) {
+func TestOrchestratorReturnsCachedTable(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeMessageChannel()
-	if o.IsTableLoaded("test") {
-		t.Error("Table not correctly identified as not being loaded.")
-	}
-	o.GetTableById("test", ch)
-	if !o.IsTableLoaded("test") {
-		t.Error("Table not correctly identified as being loaded.")
-	}
-}
-
-func TestOrchestratorNotifiesOfTableOpen(t *testing.T) {
-	o := MakeOrchestrator()
-	ch := MakeMessageChannel()
-	o.GetTableById("test", ch)
-	msg := <- ch
-	if msg.Operation() != TableOpened {
-		t.Error("Table not opened correctly.")
-	} else if msg.SourceTable() != "test" {
-		t.Error("Table opened source not opened correctly.")
-	}
-}
-
-func TestOrchestratorNotifiesMultipleUsersOfTableOpen(t *testing.T) {
-	o := MakeOrchestrator()
-	chOne := MakeMessageChannel()
-	chTwo := MakeMessageChannel()
-	o.GetTableById("test", chOne)
-	o.GetTableById("test", chTwo)
-	if len(o.tables["test"].pendingRequests["tableOpened"].subscribers) != 2 {
-		t.Error("Simultaneous gets not handled correctly.")
-	}
-	messageOne := <- chOne
-	messageTwo := <- chTwo
-
-	if messageOne.SourceTable() != "test" || messageTwo.SourceTable() != "test" {
-		t.Error("Table entity not received correctly.")
-	}
-}
-
-func TestOrchestratorNotifiesUsersWhoGetTableAfterLoad(t *testing.T) {
-	o := MakeOrchestrator()
-	chOne := MakeMessageChannel()
-	o.GetTableById("test", chOne)
-	<- chOne
-	ch := MakeMessageChannel()
-	o.GetTableById("test", ch)
-	if len(o.tables["test"].pendingRequests[TableOpened].subscribers) != 0 {
-		t.Error("Subscribed to an already loaded table.")
-	}
-	message := <- ch
-	if message.SourceTable() != "test" {
-		t.Error("Table not returned correctly.")
-	}
-}
-
-func TestOrchestratorLoadsTableWhenCommandReceivedForTableNotLoaded(t *testing.T) {
-	o := MakeOrchestrator()
-	ch := MakeMessageChannel()
-	cmd := MakeCommand("test", "test", "", nil, nil, nil)
-	o.sendCommand(cmd, ch)
-	message := <- ch
-	if message.MessageId() != cmd.MessageId() {
-		t.Error("Response not formulated correctly.")
-	}
-}
-
-func TestOrchestratorRespondsToMultipleTables(t *testing.T) {
-	o := MakeOrchestrator()
-	chOne := MakeMessageChannel()
-	chTwo := MakeMessageChannel()
-	cmdOne := MakeCommand("test", "test", "", nil, nil, nil)
-	cmdTwo := MakeCommand("test", "test2", "", nil, nil, nil)
-	o.sendCommand(cmdOne, chOne)
-	o.sendCommand(cmdTwo, chTwo)
-	messageOne := <- chOne
-	messageTwo := <- chTwo
-
-	if messageOne.MessageId() != cmdOne.MessageId() {
-		t.Error("Response one not created correctly.")
-	}
-	if messageTwo.MessageId() != cmdTwo.MessageId() {
-		t.Error("Response two not created correctly.")
-	}
-}
-
-func TestOrchestratorRespondsToMultipleRequestsSameTable(t *testing.T) {
-	o := MakeOrchestrator()
-	chOne := MakeMessageChannel()
-	chTwo := MakeMessageChannel()
-	cmdOne := MakeCommand("test", "test", "", nil, nil, nil)
-	cmdTwo := MakeCommand("test", "test", "", nil, nil, nil)
-	o.sendCommand(cmdOne, chOne)
-	o.sendCommand(cmdTwo, chTwo)
-	messageOne := <- chOne
-	messageTwo := <- chTwo
-
-	if messageOne.MessageId() != cmdOne.MessageId() {
-		t.Error("Response one not created correctly.")
-	}
-	if messageTwo.MessageId() != cmdTwo.MessageId() {
-		t.Error("Response two not created correctly.")
-	}
-
-	if len(o.tables) != 1 {
-		t.Error("Tables not cached correctly.")
-	}
-}
-
-/*
-This will deadlock if not forwarded
- */
-func TestOrchestratorForwarding(t *testing.T) {
-	o := MakeOrchestrator()
-	ch := MakeMessageChannel()
-	o.GetTableById("test", ch)
+	ch := node.MakeMessageChannel()
+	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
 	<- ch
-	o.GetTableById("test2", ch)
+	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
 	<- ch
-	o.tables["test2"].channel = MakeTableOrchestratorChannel()
-	o.tables["test"].channel.tableToOrchestrator <- MakeCommand("test", "test2", "test", nil, nil, nil)
-	<- o.tables["test2"].channel.orchestratorToTable
+	if len(o.children) != 1 {
+		t.Error("Child cached more than once")
+	}
 }
 
-func TestSubscribeToDistantTableIntegration(t *testing.T) {
+func TestOrchestratorNotifiesOnTableCreation(t *testing.T) {
 	o := MakeOrchestrator()
-	ch := MakeMessageChannel()
-	orCh := MakeTableChannel()
-	tbl := MakeTable("test", orCh.channel)
-	<- orCh.channel.tableToOrchestrator
-	o.tables["test"] = orCh
-	orCh.tableInitialized = true
-	go o.listenToTable(orCh)
-
-	cc := MakeCellChannel()
-	MakeCell(1, 1, "", MakeCellChannel())
-	tbl.cells[1] = make(map[int]*cellChannel)
-	tbl.cells[1][1] = cc
-	cc.cellInitialized = true
-	go tbl.listenToCell(cc)
-	o.GetTableById("test2", ch)
-	<- ch // table created
-
-	o.sendCommand(MakeCommand(EditCellValue, "test2", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test").ToBytes()), ch)
-	message := <-ch
-	cc.channel.cellToTable <- MakeCommand(Subscribe, "test2", "test", MakeCellLocation(1, 1), MakeCellLocation(1, 1), nil)
-	message = <- cc.channel.tableToCell // we are subscribed
-	c := MakeCellFromBytes(message.Payload())
-	if c.CellDisplayValue != "test" {
-		t.Error("Subscribe payload not returned correctly.")
-	}
-	o.sendCommand(MakeCommand(EditCellValue, "test2", "", MakeCellLocation(1, 1), nil, MakeTableCommand("test2").ToBytes()), ch)
+	ch := node.MakeMessageChannel()
+	chTwo := node.MakeMessageChannel()
+	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
+	o.INode.GetOrCreateChild(chTwo, MakeCoordinates("test", nil))
 	<- ch
+	<- chTwo
+	if len(o.children) != 1 {
+		t.Error("Child tables not created correctly.")
+	}
+}
 
-	message = <- cc.channel.tableToCell
-	c = MakeCellFromBytes(message.Payload())
-	if c.DisplayValue() != "test2" {
-		t.Error("Subscribe payload after update not returned correctly.")
+func TestOrchestratorRoutesToChild(t *testing.T) {
+	o := MakeOrchestrator()
+	ch := node.MakeMessageChannel()
+	o.INode.GetOrCreateChild(ch, MakeCoordinates("test", nil))
+	<- ch
+	tblCh := node.MakeIChild()
+	o.children["test2"] = tblCh
+	o.children["test"].Channel().ChildToParent() <- node.MakeCommand("test", MakeCoordinates("test2", nil), MakeCoordinates("test", nil), nil)
+	msg := <- tblCh.Channel().ParentToChild()
+	if msg.Operation() != "test" {
+		t.Error("Orchestrator did not forward message correctly.")
 	}
 }

@@ -38,7 +38,7 @@ type nodestub struct {
 
 func (ns *nodestub) onMessageFromParent(msg IMessage) {
 	response := MakeResponse(msg, nil)
-	go ns.INode.send(ns.INode.Parent().ChildToParent(), response)
+	go ns.INode.Send(ns.INode.Parent().ChildToParent(), response)
 }
 
 func (ns *nodestub) onMessageFromChild(msg IMessage) {
@@ -178,5 +178,20 @@ func TestRoutingBetweenChildren(t *testing.T) {
 	message := <- node.children["test2"].Channel().ParentToChild()
 	if message.Operation() != "test" {
 		t.Error("Message not routed properly between children.")
+	}
+}
+
+func TestAutomaticallyCreateChild(t *testing.T) {
+	pcoords := makeCoordinates("parent")
+	ccoords := makeCoordinates("child")
+	ch := makeIChannel()
+	node := makeNodeStub(ch, ccoords, pcoords)
+	<- ch.ChildToParent() // initialized
+	ch.ParentToChild() <- MakeCommand("test", makeCoordinates("test2"), makeCoordinates("parent"), nil)
+	message := <- ch.ChildToParent()
+	if message.Operation() != "test" {
+		t.Error("Child not automatically created.")
+	} else if len(node.children) != 1 {
+		t.Error("Child not cached.")
 	}
 }

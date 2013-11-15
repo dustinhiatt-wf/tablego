@@ -8,6 +8,7 @@ import (
 type ICell interface {
 	DisplayValue()				string
 	SetValue(value string)
+	GetCellValue()				*cellValue
 }
 
 type cell struct {
@@ -23,8 +24,27 @@ type cell struct {
 	pendingRequests					map[string]chan node.IMessage
 }
 
+type cellValue struct {
+	CellDisplayValue				string
+	Value							string
+	LastUpdated						int
+}
+
+func makeCellValue(cellDisplayValue, value string, lastUpdated int) *cellValue {
+	cv := new(cellValue)
+	cv.CellDisplayValue = cellDisplayValue
+	cv.Value = value
+	cv.LastUpdated = lastUpdated
+	return cv
+}
+
+func (c *cell) GetCellValue() *cellValue {
+	return makeCellValue(c.DisplayValue(), c.Value, c.LastUpdated)
+}
+
 func (c *cell) ToBytes() []byte {
-	res, err := json.Marshal(c)
+	cv := c.GetCellValue()
+	res, err := json.Marshal(cv)
 	if err != nil {
 		return nil
 	}
@@ -33,12 +53,17 @@ func (c *cell) ToBytes() []byte {
 }
 
 func MakeCellFromBytes(bytes []byte) *cell {
-	var m cell
+	var m cellValue
 	err := json.Unmarshal(bytes, &m)
 	if err != nil {
 		return nil
 	}
-	return &m
+	cv := &m
+	cell := new(cell)
+	cell.CellDisplayValue = cv.CellDisplayValue
+	cell.Value = cv.Value
+	cell.LastUpdated = cv.LastUpdated
+	return cell
 }
 
 func (c *cell) DisplayValue() string {
@@ -51,44 +76,48 @@ func (c *cell) SetValue(value string) {
 	}
 	c.Value = value
 	c.CellDisplayValue = value
-	go c.observers.notifyObservers(CellUpdated, c.cellChannel.channel.cellToTable, c.ToBytes())
+	go c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes())
 }
 
-func (c *cell) onMessageFromParent(msg IMessage) {
+func (c *cell) OnMessageFromParent(msg node.IMessage) {
 	if msg.GetType() == node.Response {
 
 	} else if msg.GetType() == node.Command {
-		switch message.Operation() {
+		switch msg.Operation() {
 		case GetCellValue:
-			resp := node.MakeResponse(message, c.ToBytes())
-			go c.INode.send(c.INode.Parent().ChildToParent(), resp)
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.INode.Send(c.INode.Parent().ChildToParent(), resp)
 		case EditCellValue:
-			if message.Timestamp() < c.LastUpdated {
-				err := node.MakeError(message, "You have attempted a stale update.")
-				go c.send(c.INode.Parent().ChildToParent(), err)
-				continue
+			if msg.Timestamp() < c.LastUpdated {
+				err := node.MakeError(msg, nil)
+				go c.Send(c.INode.Parent().ChildToParent(), err)
+				return
 			}
 
-			tblCmd := MakeTableCommandFromJson(message.Payload())
+			tblCmd := MakeTableCommandFromJson(msg.Payload())
 			c.SetValue(tblCmd.Value)
-			resp := node.MakeResponse(message, c.ToBytes())
-			go c.send(c.INode.Parent().ChildToParent(), resp)
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.Send(c.INode.Parent().ChildToParent(), resp)
+		default:
+			resp := node.MakeResponse(msg, nil)
+			c.INode.Send(c.INode.Parent().ChildToParent(), resp)
 		}
+
 	} else {
 		//TODO: log error
 	}
 }
 
-func (c *cell) onMessageFromChild(msg IMessage) {
+func (c *cell) OnMessageFromChild(msg node.IMessage) {
 	panic("Cells should not receive messages from children")
 }
 
-func (c *cell) GetChild(coords ICoordinates) IChild {
+func (c *cell) GetChild(coords node.ICoordinates) node.IChild {
 	//TODO: so we can handle embedded formulas, they should be children
 	panic("Cells have no children currently.")
 }
 
-func (t *table) makeChildNode(parentChannel IChild, childCoordinates ICoordinates) INode {
+func (c *cell) makeChildNode(parentChannel node.IChild, childCoordinates node.ICoordinates) node.INode {
 	panic("Cells can't create children.")
 }
 
@@ -96,7 +125,7 @@ func (c *cell) Subscribe(msg node.IMessage) {
 	c.observers.addObserver(msg)
 }
 
-func MakeCell(parentChannel IChannel, coordinates, parentCoordinates ICoordinates, value string) *cell {
+func MakeCell(parentChannel node.IChannel, coordinates, parentCoordinates node.ICoordinates, value string) *cell {
 	cell := new(cell)
 	cell.Value = value
 	cell.CellDisplayValue = value
