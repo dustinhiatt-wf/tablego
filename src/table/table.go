@@ -24,6 +24,8 @@ func (t *table) OnMessageFromParent(msg node.IMessage) {
 			go t.getValueRangeByCellRange(t.INode.Parent().ChildToParent(), msg)
 		case SubscribeToRange:
 			go t.subscribeToRange(t.INode.Parent().ChildToParent(), msg)
+		case UnsubscribeToRange:
+			go t.unsubscribeToRange(t.INode.Parent().ChildToParent(), msg)
 		default:
 			resp := node.MakeResponse(msg, nil)
 			go t.INode.Send(t.INode.Parent().ChildToParent(), resp)
@@ -214,6 +216,50 @@ func (t *table) subscribeToRange(ch chan node.IMessage, msg node.IMessage) {
 		}
 
 		ch <- node.MakeResponse(msg, vr.ToBytes())
+	}()
+}
+
+func (t *table) unsubscribeToRange(ch chan node.IMessage, msg node.IMessage) {
+	cr := MakeRangeFromBytes(msg.Payload())
+	if cr == nil {
+		go t.INode.Send(ch, node.MakeError(msg, nil))
+		return
+	}
+
+	subscriberLoc := msg.SourceCoordinates().(ITableCoordinates)
+
+	go func() {
+		loc, _ := t.INode.Coordinates().(ITableCoordinates)
+		listeners := make([]chan node.IMessage, 0)
+		for i := cr.StartRow; i < cr.StopRow; i++ {
+			for j := cr.StartColumn; j < cr.StopColumn; j++ {
+				msg := makeAddToChildMessage(i, j, "", nil)
+				t.collectionChannel <- msg
+				child := <- msg.returnChannel
+				if child != nil {
+					ch := node.MakeMessageChannel()
+					var sp *subscribePayload
+					if subscriberLoc.CellLocation() != nil {
+						sp = makeSubscribePayload(subscriberLoc.TableId(), subscriberLoc.CellLocation().Row(), subscriberLoc.CellLocation().Column(), true)
+					} else {
+						sp = makeSubscribePayload(subscriberLoc.TableId(), -1, -1, false)
+					}
+					cmd := node.MakeCommand(Unsubscribe, MakeCoordinates(loc.TableId(), MakeCellLocation(i, j)), t.INode.Coordinates(), sp.ToBytes())
+					ch = node.MakeMessageChannel()
+					req := makeAddToPendingRequestMessage(cmd.MessageId(), ch)
+					t.requestChannel <-req
+					<-req.returnChannel
+					listeners = append(listeners, ch)
+					go t.INode.Send(child.Channel().ParentToChild(), cmd)
+				}
+			}
+		}
+
+		for _, ch := range listeners {
+			<- ch
+		}
+
+		ch <- node.MakeResponse(msg, nil)
 	}()
 }
 

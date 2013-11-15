@@ -19,4 +19,5 @@ const (
 	GetCellValue         = "getCellValue"
 	Subscribe            = "subscribe"
 	SubscribeToRange	 = "subscribeToRange"
+	UnsubscribeToRange	 = "unsubscribeToRange"
 )

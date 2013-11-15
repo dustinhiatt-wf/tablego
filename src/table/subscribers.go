@@ -63,8 +63,8 @@ func (o *observers) isObserversInList(sp *subscribePayload) bool {
 
 func (o *observers) removeObserver(sp *subscribePayload) {
 	i := -1
-	for index, command := range o.observers {
-		if command == sp {
+	for index, c := range o.observers {
+		if c.column == sp.column && c.row == sp.row && c.tableId == sp.tableId {
 			i = index
 			break
 		}

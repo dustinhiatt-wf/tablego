@@ -7,7 +7,7 @@ import (
 
 type ICell interface {
 	DisplayValue() string
-	SetValue(value string)
+	SetValue(value string, timestamp int)
 	GetCellValue() *cellValue
 }
 
@@ -70,12 +70,13 @@ func (c *cell) DisplayValue() string {
 	return c.CellDisplayValue
 }
 
-func (c *cell) SetValue(value string) {
+func (c *cell) SetValue(value string, timestamp int) {
 	if value == c.Value {
 		return
 	}
 	c.Value = value
 	c.CellDisplayValue = value
+	c.LastUpdated = timestamp
 	go c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes(), c.INode.Coordinates())
 }
 
@@ -95,12 +96,17 @@ func (c *cell) OnMessageFromParent(msg node.IMessage) {
 			}
 
 			tblCmd := MakeTableCommandFromJson(msg.Payload())
-			c.SetValue(tblCmd.Value)
+			c.SetValue(tblCmd.Value, msg.Timestamp())
 			resp := node.MakeResponse(msg, c.ToBytes())
 			go c.Send(c.INode.Parent().ChildToParent(), resp)
 		case Subscribe:
 			sp := makeSubscribePayloadFromBytes(msg.Payload())
 			c.Subscribe(sp)
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.Send(c.INode.Parent().ChildToParent(), resp)
+		case Unsubscribe:
+			sp := makeSubscribePayloadFromBytes(msg.Payload())
+			c.Unsubscribe(sp)
 			resp := node.MakeResponse(msg, c.ToBytes())
 			go c.Send(c.INode.Parent().ChildToParent(), resp)
 		default:
@@ -128,6 +134,10 @@ func (c *cell) makeChildNode(parentChannel node.IChild, childCoordinates node.IC
 
 func (c *cell) Subscribe(sp *subscribePayload) {
 	c.observers.addObserver(sp)
+}
+
+func (c *cell) Unsubscribe(sp *subscribePayload) {
+	c.observers.removeObserver(sp)
 }
 
 func MakeCell(parentChannel node.IChannel, coordinates, parentCoordinates node.ICoordinates, value string) *cell {

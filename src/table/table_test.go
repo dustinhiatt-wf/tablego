@@ -3,6 +3,8 @@ package table
 import (
 	"node"
 	"testing"
+	"time"
+	"log"
 )
 
 func TestCreateTable(t *testing.T) {
@@ -135,6 +137,34 @@ func TestSubscribeToRangeNotifiesOnBlankUpdate(t *testing.T) {
 	<- child.Channel().ChildToParent() // received a subscription notification
 }
 
+func TestUnsubscribeToRange(t *testing.T) {
+	child := node.MakeIChild()
+	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
+	<-child.Channel().ChildToParent() //table initialized
+	cr := MakeRange("A1:C3")
+
+	child.Channel().ParentToChild() <- node.MakeCommand(SubscribeToRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	<-child.Channel().ChildToParent()
+
+	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+
+	<- child.Channel().ChildToParent() // one of these lets me know the cell was edited and the other lets me know that we
+	<- child.Channel().ChildToParent() // received a subscription notification
+
+	child.Channel().ParentToChild() <- node.MakeCommand(UnsubscribeToRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
+	<- child.Channel().ChildToParent() // unsubscribed
+	child.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test2").ToBytes())
+	<- child.Channel().ChildToParent() // updated
+
+	go func () {
+		msg := <- child.Channel().ChildToParent()
+		log.Println(msg.Operation())
+		t.Error("Unsubscription to range not successful.")
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+}
+
 func BenchmarkAddAndGetCells(b *testing.B) {
 	child := node.MakeIChild()
 	MakeTable(child.Channel(), MakeCoordinates("test", nil), MakeCoordinates("", nil))
@@ -162,7 +192,7 @@ func BenchmarkAddAndGetCells(b *testing.B) {
 
 /*
 
-func TestEditValueSubscribe(t *testing.T) {
+func TestEditValueSubscr ibe(t *testing.T) {
 	table := MakeTable("test", nil, nil)
 	cellCh := MakeValueChannel()
 	table.EditTableValue(1, 1, "test", cellCh)
