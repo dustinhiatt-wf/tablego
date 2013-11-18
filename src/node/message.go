@@ -24,7 +24,7 @@ type IMessage interface {
 	Error()						string
 	Equal(msg IMessage) 		bool
 	GetType()					string
-	Timestamp()					int
+	Timestamp()					time.Time
 	ToBytes()					[]byte
 }
 
@@ -36,7 +36,7 @@ type message struct {
 	MMessageId			string
 	MError				string
 	MKind				string
-	MTimestamp			int
+	MTimestamp			time.Time
 }
 
 func (m *message) ToBytes() []byte {
@@ -81,7 +81,7 @@ func (m *message) GetType() string {
 	return m.MKind
 }
 
-func (m *message) Timestamp() int {
+func (m *message) Timestamp() time.Time {
 	return m.MTimestamp
 }
 
@@ -91,7 +91,7 @@ func (m *message) Equal(msg IMessage) bool {
 
 func makeMessage(operation string, targetCoordinates, sourceCoordinates ICoordinates, payload []byte) *message {
 	msg := new(message)
-	msg.MTimestamp = time.Now().Nanosecond()
+	msg.MTimestamp = time.Now()
 	msg.MOperation = operation
 	msg.MTargetCoordinates = targetCoordinates
 	msg.MSourceCoordinates = sourceCoordinates

@@ -52,7 +52,10 @@ func (c *connection) readPump() {
 							cell := table.MakeCellFromBytes(message.Payload())
 							resp[2] = cell.DisplayValue()
 							response["values"] = resp
-							c.write(response)
+							err := c.write(response)
+							if err != nil {
+								return // exit go routine
+							}
 						}
 					}
 				}()

@@ -197,3 +197,37 @@ func TestUpdateCellValue(t *testing.T) {
 		t.Error("Cell not updated correctly.")
 	}
 }
+
+func TestTextGetsUpdatedToNumberInFormula(t *testing.T) {
+	resetMaster()
+	cr := MakeRange("A1:B4")
+	cr.TableId = "test"
+	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
+	SubscribeToTableRange(cr, values, observer)
+	<- values // we got our range and subscribed
+	UpdateCellAtLocation("test", 1, 1, "test")
+	<- observer // we are updated with 1 value
+
+	UpdateCellAtLocation("test", 3, 0, "=sum(A1:B2)")
+	msg := <- observer //formula now correct
+	c := MakeCellFromBytes(msg.Payload())
+	if c.DisplayValue() != "0" {
+		t.Error("Sum not calculated correctly.")
+	}
+
+	UpdateCellAtLocation("test", 1, 1, "1")
+	var message node.IMessage
+	msg = <- observer
+	if msg.SourceCoordinates().(ITableCoordinates).CellLocation().Row() == 3 {
+		message = msg
+	}
+	msg = <- observer
+	if msg.SourceCoordinates().(ITableCoordinates).CellLocation().Row() == 3 {
+		message = msg
+	}
+
+	c = MakeCellFromBytes(message.Payload())
+	if c.DisplayValue() != "1" {
+		t.Error("Formula not updated correctly.")
+	}
+}

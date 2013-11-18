@@ -84,8 +84,6 @@ func TestSerializationDeserializationOfCell(t *testing.T) {
 		t.Error("Displayed values do not match.")
 	} else if c.Value != copy.Value {
 		t.Error("Values do not match.")
-	} else if c.LastUpdated != copy.LastUpdated {
-		t.Error("Last updated values do not match.")
 	}
 }
 

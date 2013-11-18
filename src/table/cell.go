@@ -5,11 +5,12 @@ import (
 	"node"
 	"strings"
 	"reflect"
+	"time"
 )
 
 type ICell interface {
 	DisplayValue() string
-	SetValue(value string, timestamp int)
+	SetValue(value string, timestamp time.Time)
 	GetCellValue() *cellValue
 }
 
@@ -21,7 +22,7 @@ type cell struct {
 	node.INodeFactory
 	CellDisplayValue 					string
 	Value            					string
-	LastUpdated      					int
+	LastUpdated      					time.Time
 	observers        					*observers
 	pendingRequests  					map[string]chan node.IMessage
 	isFormula		 					bool
@@ -33,10 +34,10 @@ type cell struct {
 type cellValue struct {
 	CellDisplayValue string
 	Value            string
-	LastUpdated      int
+	LastUpdated      time.Time
 }
 
-func makeCellValue(cellDisplayValue, value string, lastUpdated int) *cellValue {
+func makeCellValue(cellDisplayValue, value string, lastUpdated time.Time) *cellValue {
 	cv := new(cellValue)
 	cv.CellDisplayValue = cellDisplayValue
 	cv.Value = value
@@ -76,7 +77,7 @@ func (c *cell) DisplayValue() string {
 	return c.CellDisplayValue
 }
 
-func (c *cell) SetValue(value string, timestamp int) {
+func (c *cell) SetValue(value string, timestamp time.Time) {
 	if value == c.Value {
 		return
 	}
@@ -100,7 +101,7 @@ func (c *cell) OnMessageFromParent(msg node.IMessage) {
 			resp := node.MakeResponse(msg, c.ToBytes())
 			go c.INode.Send(c.INode.Parent().ChildToParent(), resp)
 		case EditCellValue:
-			if msg.Timestamp() < c.LastUpdated {
+			if msg.Timestamp().Before(c.LastUpdated) {
 				err := node.MakeError(msg, nil)
 				go c.Send(c.INode.Parent().ChildToParent(), err)
 				return

@@ -1,6 +1,6 @@
 var ws;
 var tableId = '5c645d52fbb74d64a44535c942dfb431';
-var numRows = 3000;
+var numRows = 1000;
 
 function setModal(visible) {
     var modal = $('#dialog-modal');
@@ -19,7 +19,6 @@ function updateCells(cells) {
 
 function updateCell(cell) {
     var table = document.getElementById('table');
-    console.log(cell)
     table.rows[cell[0]].cells[cell[1]].innerText = cell[2];
 }
 
