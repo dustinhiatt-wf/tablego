@@ -115,7 +115,8 @@ func TestSubscribeToOrchestrator(t *testing.T) {
 }
 
 func TestSubscriberWhenCellGetsUpdated(t *testing.T) {
-	cr := MakeRange("A1:Z100")
+	resetMaster()
+	cr := MakeRange("A1:B3")
 	cr.TableId = "test"
 	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
 	SubscribeToTableRange(cr, values, observer)
@@ -129,7 +130,8 @@ func TestSubscriberWhenCellGetsUpdated(t *testing.T) {
 }
 
 func TestCreateFormulaOverRange(t *testing.T) {
-	cr := MakeRange("A1:Z100")
+	resetMaster()
+	cr := MakeRange("A1:C5")
 	cr.TableId = "test"
 	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
 	SubscribeToTableRange(cr, values, observer)
@@ -147,6 +149,7 @@ func TestCreateFormulaOverRange(t *testing.T) {
 }
 
 func TestFormulaValueGetsUpdatedWhenRangeUpdated(t *testing.T) {
+	resetMaster()
 	cr := MakeRange("A1:B4")
 	cr.TableId = "test"
 	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
@@ -172,5 +175,25 @@ func TestFormulaValueGetsUpdatedWhenRangeUpdated(t *testing.T) {
 	c := MakeCellFromBytes(message.Payload())
 	if c.DisplayValue() != "30" {
 		t.Error("Formula value did not update correctly.")
+	}
+}
+
+func TestUpdateCellValue(t *testing.T) {
+	resetMaster()
+	cr := MakeRange("A1:B4")
+	cr.TableId = "test"
+	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
+	SubscribeToTableRange(cr, values, observer)
+	<- values // we got our range and subscribed
+
+	UpdateCellAtLocation("test", 1, 1, "`")
+	<- observer // we are updated with 1 value
+
+	UpdateCellAtLocation("test", 1, 1, "1")
+	msg := <- observer
+
+	cell := MakeCellFromBytes(msg.Payload())
+	if cell.DisplayValue() != "1" {
+		t.Error("Cell not updated correctly.")
 	}
 }

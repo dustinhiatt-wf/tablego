@@ -2,16 +2,26 @@ package table
 
 import (
 	"node"
+	"sync"
 )
 
 var master = MakeOrchestrator()
+
+/*
+For unit testing
+ */
+
+func resetMaster() {
+	master = MakeOrchestrator()
+}
 
 type orchestrator struct {
 	node.INode
 	node.INodeFactory
 	node.ICommunicationHandler
-	children          map[string]node.IChild
-	collectionChannel chan *addToChildMessage
+	children          	map[string]node.IChild
+	collectionChannel 	chan *addToChildMessage
+	childMutex 			sync.Mutex
 }
 
 func (o *orchestrator) OnMessageFromParent(msg node.IMessage) {
@@ -66,51 +76,30 @@ func (o *orchestrator) subscribeToTableRange(cellRange *cellrange, values, obser
 	}()
 }
 
-func (o *orchestrator) listenToCollection(ch chan *addToChildMessage) {
-	ch <- nil
-	for {
-		select {
-		case message := <-ch:
-			if message.child == nil {
-				child, ok := o.children[message.tableId]
-				if !ok {
-					message.returnChannel <- nil
-					continue
-				}
-				message.returnChannel <- child
-			} else {
-				o.children[message.tableId] = message.child
-				message.returnChannel <- message.child
-			}
-		}
-	}
-}
-
 func (o *orchestrator) GetChild(coords node.ICoordinates) node.IChild {
 	original, _ := coords.(ITableCoordinates)
-	msg := makeAddToChildMessage(0, 0, original.TableId(), nil)
-	o.collectionChannel <- msg
-	rsp := <-msg.returnChannel
-	return rsp
+	o.childMutex.Lock()
+	child, ok := o.children[original.TableId()]
+	o.childMutex.Unlock()
+	if ok {
+		return child
+	}
+	return nil
 }
 
 func (o *orchestrator) MakeChildNode(parentChannel node.IChild, childCoordinates node.ICoordinates) node.INode {
 	loc, _ := childCoordinates.(ITableCoordinates)
 	child := MakeTable(parentChannel.Channel(), MakeCoordinates(loc.TableId(), nil), o.INode.Coordinates())
 
-	msg := makeAddToChildMessage(0, 0, loc.TableId(), parentChannel)
-	o.collectionChannel <- msg
-	<-msg.returnChannel
+	o.childMutex.Lock()
+	o.children[loc.TableId()] = parentChannel
+	o.childMutex.Unlock()
 	return child
 }
 
 func MakeOrchestrator() *orchestrator {
 	o := new(orchestrator)
 	o.children = make(map[string]node.IChild)
-	ch := make(chan *addToChildMessage)
-	o.collectionChannel = ch
-	go o.listenToCollection(ch)
-	<-ch //make sure the routine has started
 	o.INode = node.MakeNode(nil, MakeCoordinates("", nil), nil, o, o)
 	o.INode.Initialize()
 	return o
