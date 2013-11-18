@@ -1,10 +1,3 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/5/13
- * Time: 1:56 PM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 import (
@@ -14,10 +7,10 @@ import (
 
 type subscribePayload struct {
 	ISerializable
-	row			int
-	column		int
-	tableId		string
-	hasCellLoc	bool //cheating because of json conversion of negative numbers
+	Row			int
+	Column		int
+	TableId		string
+	HasCellLoc	bool //cheating because of json conversion of negative numbers
 }
 
 func (sp *subscribePayload) ToBytes() []byte {
@@ -30,16 +23,16 @@ func (sp *subscribePayload) ToBytes() []byte {
 
 func makeSubscribePayload(tableId string, row, column int, hasCellLoc bool) *subscribePayload {
 	sp := new(subscribePayload)
-	sp.row = row
-	sp.column = column
-	sp.tableId = tableId
-	sp.hasCellLoc = hasCellLoc
+	sp.Row = row
+	sp.Column = column
+	sp.TableId = tableId
+	sp.HasCellLoc = hasCellLoc
 	return sp
 }
 
 func makeSubscribePayloadFromBytes(bytes []byte) *subscribePayload {
 	var sp subscribePayload
-	json.Unmarshal(bytes, sp)
+	json.Unmarshal(bytes, &sp)
 	return &sp
 }
 
@@ -54,7 +47,7 @@ type observers struct {
 
 func (o *observers) isObserversInList(sp *subscribePayload) bool {
 	for _, c := range o.observers {
-		if c.column == sp.column && c.row == sp.row && c.tableId == sp.tableId {
+		if c.Column == sp.Column && c.Row == sp.Row && c.TableId == sp.TableId {
 			return true
 		}
 	}
@@ -64,7 +57,7 @@ func (o *observers) isObserversInList(sp *subscribePayload) bool {
 func (o *observers) removeObserver(sp *subscribePayload) {
 	i := -1
 	for index, c := range o.observers {
-		if c.column == sp.column && c.row == sp.row && c.tableId == sp.tableId {
+		if c.Column == sp.Column && c.Row == sp.Row && c.TableId == sp.TableId {
 			i = index
 			break
 		}
@@ -77,17 +70,17 @@ func (o *observers) removeObserver(sp *subscribePayload) {
 }
 
 func (o *observers) notifyObservers(operation string, ch chan node.IMessage, bytes []byte, sourceCoordinates node.ICoordinates) {
-	for _, cmd := range o.observers {
-		go func() {
+	for _, observer := range o.observers {
+		go func(obs *subscribePayload) {
 			var destination node.ICoordinates
-			if !cmd.hasCellLoc {
-				destination = MakeCoordinates(cmd.tableId, nil)
+			if !obs.HasCellLoc {
+				destination = MakeCoordinates(obs.TableId, nil)
 			} else {
-				destination = MakeCoordinates(cmd.tableId, MakeCellLocation(cmd.row, cmd.column))
+				destination = MakeCoordinates(obs.TableId, MakeCellLocation(obs.Row, obs.Column))
 			}
 			cmd := node.MakeCommand(operation, destination, sourceCoordinates, bytes)
 			ch <- cmd
-		}()
+		}(observer)
 	}
 }
 

@@ -113,3 +113,64 @@ func TestSubscribeToOrchestrator(t *testing.T) {
 		t.Error("Orchestrator not notified correctly.")
 	}
 }
+
+func TestSubscriberWhenCellGetsUpdated(t *testing.T) {
+	cr := MakeRange("A1:Z100")
+	cr.TableId = "test"
+	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
+	SubscribeToTableRange(cr, values, observer)
+	<- values // we got our range and subscribed
+	UpdateCellAtLocation("test", 1, 1, "1")
+	msg := <- observer
+	cell := MakeCellFromBytes(msg.Payload())
+	if cell.DisplayValue() != "1" {
+		t.Error("Sum not calculated correctly.")
+	}
+}
+
+func TestCreateFormulaOverRange(t *testing.T) {
+	cr := MakeRange("A1:Z100")
+	cr.TableId = "test"
+	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
+	SubscribeToTableRange(cr, values, observer)
+	<- values // we got our range and subscribed
+	UpdateCellAtLocation("test", 1, 1, "1")
+	<- observer // we are updated with 1 value
+
+	UpdateCellAtLocation("test", 3, 0, "=sum(A1:B2)")
+
+	msg := <- observer
+	c := MakeCellFromBytes(msg.Payload())
+	if c.DisplayValue() != "1" {
+		t.Error("Formula not calculated correctly.")
+	}
+}
+
+func TestFormulaValueGetsUpdatedWhenRangeUpdated(t *testing.T) {
+	cr := MakeRange("A1:B4")
+	cr.TableId = "test"
+	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
+	SubscribeToTableRange(cr, values, observer)
+	<- values // we got our range and subscribed
+	UpdateCellAtLocation("test", 1, 1, "1")
+	<- observer // we are updated with 1 value
+
+	UpdateCellAtLocation("test", 3, 0, "=sum(A1:B2)")
+	<- observer //formula now correct
+
+	UpdateCellAtLocation("test", 1, 1, "30")
+	var message node.IMessage
+	msg := <- observer
+	if msg.SourceCoordinates().(ITableCoordinates).CellLocation().Row() == 3 {
+		message = msg
+	}
+	msg = <- observer
+	if msg.SourceCoordinates().(ITableCoordinates).CellLocation().Row() == 3 {
+		message = msg
+	}
+
+	c := MakeCellFromBytes(message.Payload())
+	if c.DisplayValue() != "30" {
+		t.Error("Formula value did not update correctly.")
+	}
+}

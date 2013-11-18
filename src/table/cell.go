@@ -5,6 +5,7 @@ import (
 	"node"
 	"strings"
 	"reflect"
+	"strconv"
 )
 
 type ICell interface {
@@ -120,6 +121,19 @@ func (c *cell) OnMessageFromParent(msg node.IMessage) {
 			c.Unsubscribe(sp)
 			resp := node.MakeResponse(msg, c.ToBytes())
 			go c.Send(c.INode.Parent().ChildToParent(), resp)
+		case CellUpdated:
+			loc, _ := msg.SourceCoordinates().(ITableCoordinates)
+			values := c.formulaValueRange.Values
+			_, ok := values[strconv.Itoa(loc.CellLocation().Row())]
+			cell := MakeCellFromBytes(msg.Payload())
+			if ok {
+				_, ok = values[strconv.Itoa(loc.CellLocation().Row())][strconv.Itoa(loc.CellLocation().Column())]
+				if ok {
+					values[strconv.Itoa(loc.CellLocation().Row())][strconv.Itoa(loc.CellLocation().Column())] = cell.DisplayValue()
+					updatedValue := c.executeFormula()
+					c.SetValue(updatedValue, msg.Timestamp())
+				}
+			}
 		default:
 			resp := node.MakeResponse(msg, nil)
 			c.INode.Send(c.INode.Parent().ChildToParent(), resp)
@@ -197,11 +211,25 @@ func (c *cell) sum(parts []string) string {
 		go c.INode.Send(c.INode.Parent().ChildToParent(), cmd)
 		resp := <- ch // we got our value range
 
-		vr := MakeValueRangeFromBytes(resp.ToBytes())
+		vr := MakeValueRangeFromBytes(resp.Payload())
 		c.formulaValueRange = vr
 	}
 
 	return c.formulaValueRange.Sum()
+}
+
+func (c *cell) executeFormula() string {
+	if !strings.HasPrefix(c.Value, "=") {
+		return ""
+	}
+
+	parts := parseFormula(c.Value)
+	switch strings.ToLower(parts[0]) {
+	case "sum":
+		return c.formulaValueRange.Sum()
+	default:
+		return ""
+	}
 }
 
 func (c *cell) parseValue(value string) string {

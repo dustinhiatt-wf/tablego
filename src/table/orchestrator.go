@@ -1,17 +1,10 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/5/13
- * Time: 3:36 PM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 import (
 	"node"
 )
 
-//var master = MakeOrchestrator()
+var master = MakeOrchestrator()
 
 type orchestrator struct {
 	node.INode
@@ -121,4 +114,16 @@ func MakeOrchestrator() *orchestrator {
 	o.INode = node.MakeNode(nil, MakeCoordinates("", nil), nil, o, o)
 	o.INode.Initialize()
 	return o
+}
+
+func SubscribeToTableRange(cellRange *cellrange, values, observer chan node.IMessage) {
+	master.subscribeToTableRange(cellRange, values, observer)
+}
+
+func UpdateCellAtLocation(tableId string, row, column int, value string) {
+	cmd := node.MakeCommand(EditCellValue, MakeCoordinates(tableId, MakeCellLocation(row, column)), MakeCoordinates("", nil), MakeTableCommand(value).ToBytes())
+	ch := node.MakeMessageChannel()
+	master.sendCommand(cmd, ch)
+	<- ch
+	close(ch)
 }

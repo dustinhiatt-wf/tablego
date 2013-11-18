@@ -49,10 +49,12 @@ func (t *table) DumpInformation(c node.ICoordinates) string {
 
 func (t *table) OnMessageFromChild(msg node.IMessage) {
 	if msg.GetType() == node.Response {
-		ch, ok := t.pendingRequests[msg.MessageId()]
-		if ok {
+		prMsg := makeAddToPendingRequestMessage(msg.MessageId(), nil)
+		t.requestChannel <- prMsg
+		ch := <- prMsg.returnChannel
+		if ch != nil {
 			t.INode.Send(ch, msg)
-			delete(t.pendingRequests, msg.MessageId())
+			//delete(t.pendingRequests, msg.MessageId())
 			close(ch)
 		}
 	} else if msg.GetType() == node.Command {
@@ -228,7 +230,6 @@ func (t *table) subscribeToRange(ch chan node.IMessage, msg node.IMessage) {
 			cell := MakeCellFromBytes(resp.Payload())
 			vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())][strconv.Itoa(cellLoc.CellLocation().Column())] = cell.DisplayValue()
 		}
-
 		ch <- node.MakeResponse(msg, vr.ToBytes())
 	}()
 }

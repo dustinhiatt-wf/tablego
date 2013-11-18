@@ -1,10 +1,3 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/5/13
- * Time: 3:13 PM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 import (
@@ -14,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-//	"log"
 )
 
 const (
@@ -67,6 +58,16 @@ func MakeRangeFromBytes(bytes []byte) *cellrange {
 	return &m
 }
 
+func MakeRangeFromMap(rng map[string]interface {}) *cellrange {
+	cr := new(cellrange)
+	cr.TableId = rng["table_id"].(string)
+	cr.StartRow = int(rng["start_row"].(float64))
+	cr.StopRow = int(rng["stop_row"].(float64))
+	cr.StartColumn = int(rng["start_column"].(float64))
+	cr.StopColumn = int(rng["stop_column"].(float64))
+	return cr
+}
+
 func parseFormula(value string) []string {
 	funcCall := value[1:len(value)]
 	funcParts := strings.Split(funcCall, "(")
@@ -106,42 +107,3 @@ func getStringPartsFromAlphaNumeric(alpha string) []string {
 	re := regexp.MustCompile("[a-zA-Z]+|\\d+")
 	return re.FindAllString(alpha, -1)
 }
-
-/*
-func sum(c *cell, args string) (*cellrange, string) {
-	cr := MakeRange(args)
-	ch := MakeValueChannel()
-	if cr.tableId == "" || cr.tableId == c.table.id {
-		c.table.GetRangeByCellRange(cr, ch)
-	} else {
-		//tableCh := MakeValueChannel()
-		//c.table.orchestrator.GetTableById(cr.tableId, tableCh)
-		//tableMessage := <- tableCh
-		//tableMessage.table.GetRangeByCellRange(cr, ch)
-	}
-	message := <- ch
-	tr := message.tableRange
-	sum := 0.0
-	for i := cr.startRow; i < cr.stopRow; i++ {
-		_, ok := tr.cells[i]
-		if ok {
-			for j := cr.startColumn; j < cr.stopColumn; j++ {
-				cell, ok := tr.cells[i][j]
-				if ok {
-					if cell.value == "" {
-						continue
-					}
-					if cell.IsFloat() {
-						amt, _ := cell.AsFloat()
-						sum += amt
-					} else if cell.IsInt() {
-						amt, _ := cell.AsInt()
-						sum += float64(amt)
-					}
-				}
-			}
-		}
-	}
-	value := strconv.FormatFloat(sum, 'f', -1, 64)
-	return cr, value
-}*/
