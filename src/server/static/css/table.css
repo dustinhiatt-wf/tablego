@@ -1,0 +1,36 @@
+td {
+    border: solid 1px black;
+    height: 21px;
+    width: 70px;
+    max-height: 21px;
+    max-width: 70px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+col {
+    width: 70px;
+}
+
+tr {
+    height: 21px;
+}
+
+#table {
+    table-layout: fixed;
+    border-collapse: collapse;
+    width: 1820px;
+    max-width: 1820px;
+    min-width: 1820px;
+    height: 2100px;
+    min-height: 2100px;
+    max-height: 2100px;
+}
+
+#table .ui-selecting {
+    background: #FECA40;
+}
+
+#table .ui-selected {
+    background: #F39814; color: white;
+}
