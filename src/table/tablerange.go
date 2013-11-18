@@ -3,6 +3,7 @@ package table
 import (
 	"encoding/json"
 	"strconv"
+	"sync"
 )
 
 type tablerange struct {
@@ -11,11 +12,27 @@ type tablerange struct {
 
 type valuerange struct {
 	ISerializable
-	Values map[string]map[string]string
+	Values 	map[string]map[string]string
+	mutex	sync.Mutex
+}
+
+func (vr *valuerange) update(row, column int, value string) {
+	strRow := strconv.Itoa(row)
+	strCol := strconv.Itoa(column)
+	vr.mutex.Lock()
+	_, ok := vr.Values[strRow]
+	if ok {
+		_, ok = vr.Values[strRow]
+		if ok {
+			vr.Values[strRow][strCol] = value
+		}
+	}
+	vr.mutex.Unlock()
 }
 
 func (vr *valuerange) Sum() string {
 	sum := 0.0
+	vr.mutex.Lock()
 	for row := range vr.Values {
 		for column := range vr.Values[row] {
 			value := vr.Values[row][column]
@@ -30,6 +47,7 @@ func (vr *valuerange) Sum() string {
 			}
 		}
 	}
+	vr.mutex.Unlock()
 	return strconv.FormatFloat(sum, 'f', -1, 64)
 }
 

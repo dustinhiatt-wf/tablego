@@ -5,7 +5,6 @@ import (
 	"node"
 	"strings"
 	"reflect"
-	"strconv"
 )
 
 type ICell interface {
@@ -123,17 +122,12 @@ func (c *cell) OnMessageFromParent(msg node.IMessage) {
 			go c.Send(c.INode.Parent().ChildToParent(), resp)
 		case CellUpdated:
 			loc, _ := msg.SourceCoordinates().(ITableCoordinates)
-			values := c.formulaValueRange.Values
-			_, ok := values[strconv.Itoa(loc.CellLocation().Row())]
 			cell := MakeCellFromBytes(msg.Payload())
-			if ok {
-				_, ok = values[strconv.Itoa(loc.CellLocation().Row())][strconv.Itoa(loc.CellLocation().Column())]
-				if ok {
-					values[strconv.Itoa(loc.CellLocation().Row())][strconv.Itoa(loc.CellLocation().Column())] = cell.DisplayValue()
-					updatedValue := c.executeFormula()
-					c.SetValue(updatedValue, msg.Timestamp())
-				}
-			}
+			c.formulaValueRange.update(loc.CellLocation().Row(), loc.CellLocation().Column(), cell.DisplayValue())
+			result := c.executeFormula()
+			c.LastUpdated = msg.Timestamp()
+			c.CellDisplayValue = result
+			c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes(), c.INode.Coordinates())
 		default:
 			resp := node.MakeResponse(msg, nil)
 			c.INode.Send(c.INode.Parent().ChildToParent(), resp)
