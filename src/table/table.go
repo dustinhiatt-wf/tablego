@@ -35,18 +35,6 @@ func (t *table) OnMessageFromParent(msg node.IMessage) {
 	}
 }
 
-func (t *table) DumpInformation(c node.ICoordinates) string {
-	loc, _ := c.(ITableCoordinates)
-	str := "Table ID: " + loc.TableId() + " ROW: " + strconv.Itoa(loc.CellLocation().Row()) + " COLUMN: " + strconv.Itoa(loc.CellLocation().Column())
-	colok := false
-	_, rowok := t.children[loc.CellLocation().Row()]
-	if rowok {
-		_, colok = t.children[loc.CellLocation().Row()][loc.CellLocation().Column()]
-	}
-	str = str + " VALUE AT THAT ROW: " + strconv.FormatBool(rowok) + " VALUE AT THAT COL: " + strconv.FormatBool(colok)
-	return str
-}
-
 func (t *table) OnMessageFromChild(msg node.IMessage) {
 	if msg.GetType() == node.Response {
 		prMsg := makeAddToPendingRequestMessage(msg.MessageId(), nil)
@@ -69,6 +57,18 @@ func (t *table) OnMessageFromChild(msg node.IMessage) {
 	} else {
 		//TODO: log error
 	}
+}
+
+func (t *table) IsMessageIntendedForMe(msg node.IMessage) bool {
+	loc, _ := msg.TargetCoordinates().(ITableCoordinates)
+	selfLoc, _ := t.INode.Coordinates().(ITableCoordinates)
+	return loc.TableId() == selfLoc.TableId() && loc.CellLocation() == nil
+}
+
+func (t *table) IsMessageIntendedForParent(msg node.IMessage) bool {
+	loc, _ := msg.TargetCoordinates().(ITableCoordinates)
+	selfLoc, _ := t.INode.Coordinates().(ITableCoordinates)
+	return loc.TableId() == "" || loc.TableId() != selfLoc.TableId()
 }
 
 func (t *table) GetChild(coords node.ICoordinates) node.IChild {

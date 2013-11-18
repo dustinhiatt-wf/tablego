@@ -231,3 +231,57 @@ func TestTextGetsUpdatedToNumberInFormula(t *testing.T) {
 		t.Error("Formula not updated correctly.")
 	}
 }
+
+func TestCrossTableFormula(t *testing.T) {
+	resetMaster()
+	cr := MakeRange("A1:B4")
+	cr.TableId = "test1"
+	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
+	SubscribeToTableRange(cr, values, observer)
+	<- values // we got our range and subscribed
+
+	observerTwo := node.MakeMessageChannel()
+	cr = MakeRange("test2!A1:B4")
+	SubscribeToTableRange(cr, values, observerTwo)
+	<- values //have range on second table
+
+	UpdateCellAtLocation("test1", 1, 1, "1")
+	<- observer // we are updated with 1 value
+
+	UpdateCellAtLocation("test2", 3, 0, "=sum(test1!A1:B2)")
+	msg := <- observerTwo //formula now correct
+
+	c := MakeCellFromBytes(msg.Payload())
+	if c.DisplayValue() != "1" {
+		t.Error("Sum not calculated correctly.")
+	}
+}
+
+func TestCrossTableFormulaWithUpdate(t *testing.T) {
+	resetMaster()
+	cr := MakeRange("A1:B4")
+	cr.TableId = "test1"
+	values, observer := node.MakeMessageChannel(), node.MakeMessageChannel()
+	SubscribeToTableRange(cr, values, observer)
+	<- values // we got our range and subscribed
+
+	observerTwo := node.MakeMessageChannel()
+	cr = MakeRange("test2!A1:B4")
+	SubscribeToTableRange(cr, values, observerTwo)
+	<- values //have range on second table
+
+	UpdateCellAtLocation("test1", 1, 1, "1")
+	<- observer // we are updated with 1 value
+
+	UpdateCellAtLocation("test2", 3, 0, "=sum(test1!A1:B2)")
+	<- observerTwo //formula now correct
+
+	UpdateCellAtLocation("test1", 1, 1, "2")
+	<- observer // target cell updated
+
+	msg := <- observerTwo
+	c := MakeCellFromBytes(msg.Payload())
+	if c.DisplayValue() != "2" {
+		t.Error("Formula cell didn't update after target range update.")
+	}
+}

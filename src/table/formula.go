@@ -33,10 +33,13 @@ func (cr *cellrange) ToBytes() []byte {
 
 func MakeRange(xrange string) *cellrange {
 	cr := new(cellrange)
-	rangeParts := strings.Split(xrange, ":")
-	if len(rangeParts) == 3 {
+	rangeParts := strings.Split(xrange, "!")
+
+	if len(rangeParts) == 2 {
 		cr.TableId = rangeParts[0]
-		rangeParts = rangeParts[1:]
+		rangeParts = strings.Split(rangeParts[1], ":")
+	} else {
+		rangeParts = strings.Split(rangeParts[0], ":")
 	}
 	startParts := getStringPartsFromAlphaNumeric(rangeParts[0])
 	startRow, startColumn := parseAlphaNumericParts(startParts)

@@ -45,6 +45,18 @@ func (ns *nodestub) OnMessageFromChild(msg IMessage) {
 
 }
 
+func (ns *nodestub) IsMessageIntendedForParent(msg IMessage) bool {
+	loc, _ := msg.TargetCoordinates().(ILocationCoordinates)
+	if loc.Location() == "" || loc.Location() != ns.INode.Coordinates().(ILocationCoordinates).Location() {
+		return true
+	}
+	return false
+}
+
+func (ns *nodestub) IsMessageIntendedForMe(msg IMessage) bool {
+	return msg.TargetCoordinates().Equal(ns.INode.Coordinates())
+}
+
 func (ns *nodestub) GetChild(coords ICoordinates) IChild {
 	original, _ := coords.(ILocationCoordinates)
 	child, ok := ns.children[original.Location()]
@@ -164,22 +176,6 @@ func TestRouting(t *testing.T) {
 	message := <- ch.ChildToParent()
 	if message.Operation() != "echo" {
 		t.Error("Message not echoed.")
-	}
-}
-
-func TestRoutingBetweenChildren(t *testing.T) {
-	pcoords := makeCoordinates("parent")
-	ccoords := makeCoordinates("child")
-	ch := makeIChannel()
-	node := makeNodeStub(ch, ccoords, pcoords)
-	<- ch.ChildToParent() // initialized
-	node.children["test"] = MakeIChild()
-	node.children["test2"] = MakeIChild()
-	go node.INode.listenToChild(node.children["test"])
-	node.children["test"].Channel().ChildToParent() <- MakeCommand("test", makeCoordinates("test2"), makeCoordinates("test"), nil)
-	message := <- node.children["test2"].Channel().ParentToChild()
-	if message.Operation() != "test" {
-		t.Error("Message not routed properly between children.")
 	}
 }
 

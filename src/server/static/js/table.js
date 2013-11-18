@@ -1,6 +1,6 @@
 var ws;
-var tableId = '5c645d52fbb74d64a44535c942dfb431';
 var numRows = 1000;
+var tables = ['table1', 'table2'];
 
 function setModal(visible) {
     var modal = $('#dialog-modal');
@@ -18,11 +18,16 @@ function updateCells(cells) {
 }
 
 function updateCell(cell) {
-    var table = document.getElementById('table');
-    table.rows[cell[0]].cells[cell[1]].innerText = cell[3];
+    var table = document.getElementById(cell[0]);
+    var tblCell = table.rows[cell[1]].cells[cell[2]];
+    tblCell.innerText = cell[4];
+    tblCell.setAttribute('data-value', cell[3]);
+    console.log(tblCell);
 }
 
-function saveValue(row, column, value) {
+function saveValue(tableId, row, column, value) {
+    console.log("TABLEID");
+    console.log(tableId);
     sendMessage({
         'row': row,
         'column': column,
@@ -43,26 +48,37 @@ function sendMessage(msg, displayModal) {
 
 $(document).ready(function (){
     //presentation
-    var table = $('#table');
+    $("#tabs").tabs({
+        create: function (event, ui) {
 
-    var colGroup = document.createElement('colgroup');
-
-    for (var i=0; i < 26; i++) {
-        var col = document.createElement('col');
-        colGroup.appendChild(col);
-    }
-    table.append(colGroup);
-
-    var tbody = $('tbody');
-
-    for (var i=0; i < numRows; i++) {
-        var tr = document.createElement('tr');
-        for (var j=0; j < 26; j++) {
-            var td = document.createElement('td');
-            td.setAttribute('contenteditable', 'true');
-            tr.appendChild(td);
         }
-        tbody.append(tr)
+    });
+
+    for (var i = 0; i < tables.length; i ++) {
+        var tableId = tables[i];
+
+        var table = $('#' + tableId);
+
+        var colGroup = document.createElement('colgroup');
+
+        for (var i=0; i < 26; i++) {
+            var col = document.createElement('col');
+            colGroup.appendChild(col);
+        }
+        table.append(colGroup);
+
+        var tbody = $('tbody');
+
+        for (var i=0; i < numRows; i++) {
+            var tr = document.createElement('tr');
+            for (var j=0; j < 26; j++) {
+                var td = document.createElement('td');
+                td.setAttribute('contenteditable', 'true');
+                tr.appendChild(td);
+            }
+            tbody.append(tr)
+        }
+
     }
 
     var previousValue = null;
@@ -90,15 +106,18 @@ $(document).ready(function (){
     var tds = $('td');
     tds.focus(function () {
         var td = $(this);
-        previousValue = td.text();
+        var value = td.attr('data-value');
+        previousValue = value;
+        td.text(value);
     });
     tds.blur(function () {
         var td = $(this);
         var column = td.index();
         var row = td.parent().index();
+        var tableId = td.closest('table').attr('id');
         var val = td.text();
         if (val !== previousValue) {
-            saveValue(row, column, val);
+            saveValue(tableId, row, column, val);
         }
     });
 
@@ -131,15 +150,20 @@ $(document).ready(function (){
 
     ws = new WebSocket("ws://localhost:8123/ws");
     ws.onopen = function() {
-        ws.send(JSON.stringify({
-            'operation': 'register',
-            'table_id': tableId,
-            'start_row': 0,
-            'stop_row': numRows + 1,
-            'start_column': 0,
-            'stop_column': 27
-        }));
+        for (var i = 0; i < tables.length; i++) {
+            var tableId = tables[i];
+            ws.send(JSON.stringify({
+                'operation': 'register',
+                'table_id': tableId,
+                'start_row': 0,
+                'stop_row': numRows + 1,
+                'start_column': 0,
+                'stop_column': 27
+            }));
+        }
     };
+    var tableOneInitialized = false;
+    var tableTwoInitialized = false;
     ws.onmessage = function(e) {
         var result = jQuery.parseJSON(e.data);
 
@@ -150,8 +174,15 @@ $(document).ready(function (){
                     updateCell(result.values);
                     break;
                 case 'registered':
+                    if (result.table == 'table1') {
+                        tableOneInitialized = true;
+                    } else if (result.table == 'table2') {
+                        tableTwoInitialized = true;
+                    }
                     updateCells(result.values);
-                    setModal(false);
+                    if (tableOneInitialized && tableTwoInitialized) {
+                        setModal(false);
+                    }
                     break;
             }
         }

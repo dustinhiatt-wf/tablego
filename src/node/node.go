@@ -11,6 +11,8 @@ const (
 type ICommunicationHandler interface {
 	OnMessageFromParent(msg IMessage)
 	OnMessageFromChild(msg IMessage)
+	IsMessageIntendedForParent(msg IMessage) 	bool
+	IsMessageIntendedForMe(msg IMessage)		bool
 }
 
 type INodeFactory interface {
@@ -156,10 +158,10 @@ func (n *Node) listenToChild(child IChild) {
 	for {
 		select {
 		case message := <- child.Channel().ChildToParent():
-			if n.isMessageIntendedForParent(message) {
+			if n.communicationHandler.IsMessageIntendedForParent(message) {
 				go n.Send(n.Parent().ChildToParent(), message)
 				continue
-			} else if !n.isMessageIntendedForMe(message) {
+			} else if !n.communicationHandler.IsMessageIntendedForMe(message) {
 				child := n.nodeFactory.GetChild(message.TargetCoordinates())
 				if child != nil {
 					go n.Send(child.Channel().ParentToChild(), message)

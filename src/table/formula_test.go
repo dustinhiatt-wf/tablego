@@ -12,7 +12,7 @@ import (
 )
 
 func TestMakeRangeWithTableId(t *testing.T) {
-	cr := MakeRange("test:A1:C3")
+	cr := MakeRange("test!A1:C3")
 	if cr.TableId != "test" {
 		t.Error("Table Id not set correctly.")
 	} else if cr.StartRow != 0 {

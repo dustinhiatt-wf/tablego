@@ -45,13 +45,14 @@ func (c *connection) readPump() {
 						case message := <- ch:
 							response := make(map[string]interface{})
 							response["operation"] = table.CellUpdated
-							resp := make([]interface{}, 4)
+							resp := make([]interface{}, 5)
 							loc, _ := message.SourceCoordinates().(table.ITableCoordinates)
-							resp[0] = loc.CellLocation().Row()
-							resp[1] = loc.CellLocation().Column()
+							resp[0] = loc.TableId()
+							resp[1] = loc.CellLocation().Row()
+							resp[2] = loc.CellLocation().Column()
 							cell := table.MakeCellFromBytes(message.Payload())
-							resp[2] = cell.Value
-							resp[3] = cell.DisplayValue()
+							resp[3] = cell.Value
+							resp[4] = cell.DisplayValue()
 							response["values"] = resp
 							err := c.write(response)
 							if err != nil {
@@ -71,16 +72,18 @@ func (c *connection) readPump() {
 					for column, _ := range vr.Values[row] {
 						value := vr.Values[row][column]
 						if value.Value != "" {
-							cell := make([]interface{}, 4)
-							cell[0], _ = strconv.Atoi(row)
-							cell[1], _ = strconv.Atoi(column)
-							cell[2] = value.Value
-							cell[3] = value.CellDisplayValue
+							cell := make([]interface{}, 5)
+							cell[0] = cr.TableId
+							cell[1], _ = strconv.Atoi(row)
+							cell[2], _ = strconv.Atoi(column)
+							cell[3] = value.Value
+							cell[4] = value.CellDisplayValue
 							values = append(values, cell)
 						}
 					}
 				}
 				resp["values"] = values
+				resp["table"] = cr.TableId
 				c.write(resp)
 			case table.EditCellValue:
 				tableId := msg["table_id"].(string)

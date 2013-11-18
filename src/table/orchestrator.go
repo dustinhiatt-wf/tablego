@@ -44,6 +44,14 @@ func (o *orchestrator) OnMessageFromChild(msg node.IMessage) {
 	}
 }
 
+func (o *orchestrator) IsMessageIntendedForParent(msg node.IMessage) bool {
+	return false // orchestrator doesn't have a parent
+}
+
+func (o *orchestrator) IsMessageIntendedForMe(msg node.IMessage) bool {
+	return msg.TargetCoordinates().(ITableCoordinates).TableId() == ""
+}
+
 func (o *orchestrator) sendCommand(msg node.IMessage, observer chan node.IMessage) {
 	go func () {
 		ch := node.MakeMessageChannel()

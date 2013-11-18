@@ -16,7 +16,7 @@ tr {
     height: 21px;
 }
 
-#table {
+.table {
     table-layout: fixed;
     border-collapse: collapse;
     width: 1820px;
@@ -27,10 +27,10 @@ tr {
     max-height: 2100px;
 }
 
-#table .ui-selecting {
+.table .ui-selecting {
     background: #FECA40;
 }
 
-#table .ui-selected {
+.table .ui-selected {
     background: #F39814; color: white;
 }
