@@ -149,14 +149,14 @@ func (t *table) getValueRangeByCellRange(ch chan node.IMessage, msg node.IMessag
 	go func() {
 		loc, _ := t.INode.Coordinates().(ITableCoordinates)
 		vr := new(valuerange)
-		vr.Values = make(map[string]map[string]string)
+		vr.Values = make(map[string]map[string]*cellValue)
 		listeners := make([]chan node.IMessage, 0)
 		for i := cr.StartRow; i < cr.StopRow; i++ {
 			_, ok := t.children[i]
 			if !ok {
 				continue
 			}
-			vr.Values[strconv.Itoa(i)] = make(map[string]string)
+			vr.Values[strconv.Itoa(i)] = make(map[string]*cellValue)
 			for j := cr.StartColumn; j < cr.StopColumn; j++ {
 				child, ok := t.children[i][j]
 				if ok {
@@ -164,7 +164,7 @@ func (t *table) getValueRangeByCellRange(ch chan node.IMessage, msg node.IMessag
 					cmd := node.MakeCommand(GetCellValue, MakeCoordinates(loc.TableId(), MakeCellLocation(i, j)), loc, nil)
 					listeners = append(listeners, ch)
 					t.pendingRequests[cmd.MessageId()] = ch
-					vr.Values[strconv.Itoa(i)][strconv.Itoa(j)] = ""
+					vr.Values[strconv.Itoa(i)][strconv.Itoa(j)] = nil
 					go t.INode.Send(child.Channel().ParentToChild(), cmd)
 				}
 			}
@@ -173,7 +173,7 @@ func (t *table) getValueRangeByCellRange(ch chan node.IMessage, msg node.IMessag
 			message := <-ch
 			cell := MakeCellFromBytes(message.Payload())
 			loc, _ = message.SourceCoordinates().(ITableCoordinates)
-			vr.Values[strconv.Itoa(loc.CellLocation().Row())][strconv.Itoa(loc.CellLocation().Column())] = cell.DisplayValue()
+			vr.Values[strconv.Itoa(loc.CellLocation().Row())][strconv.Itoa(loc.CellLocation().Column())] = cell.GetCellValue()
 		}
 
 		ch <- node.MakeResponse(msg, vr.ToBytes())
@@ -190,7 +190,7 @@ func (t *table) subscribeToRange(ch chan node.IMessage, msg node.IMessage) {
 	go func() {
 		loc, _ := t.INode.Coordinates().(ITableCoordinates)
 		vr := new(valuerange)
-		vr.Values = make(map[string]map[string]string)
+		vr.Values = make(map[string]map[string]*cellValue)
 		valListeners := make([]chan node.IMessage, 0)
 		for i := cr.StartRow; i < cr.StopRow; i++ {
 			for j := cr.StartColumn; j < cr.StopColumn; j++ {
@@ -225,10 +225,10 @@ func (t *table) subscribeToRange(ch chan node.IMessage, msg node.IMessage) {
 			cellLoc, _ := resp.SourceCoordinates().(ITableCoordinates)
 			_, ok := vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())]
 			if !ok {
-				vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())] = make(map[string]string)
+				vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())] = make(map[string]*cellValue)
 			}
 			cell := MakeCellFromBytes(resp.Payload())
-			vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())][strconv.Itoa(cellLoc.CellLocation().Column())] = cell.DisplayValue()
+			vr.Values[strconv.Itoa(cellLoc.CellLocation().Row())][strconv.Itoa(cellLoc.CellLocation().Column())] = cell.GetCellValue()
 		}
 		ch <- node.MakeResponse(msg, vr.ToBytes())
 	}()

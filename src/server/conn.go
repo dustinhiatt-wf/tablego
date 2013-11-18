@@ -45,12 +45,13 @@ func (c *connection) readPump() {
 						case message := <- ch:
 							response := make(map[string]interface{})
 							response["operation"] = table.CellUpdated
-							resp := make([]interface{}, 3)
+							resp := make([]interface{}, 4)
 							loc, _ := message.SourceCoordinates().(table.ITableCoordinates)
 							resp[0] = loc.CellLocation().Row()
 							resp[1] = loc.CellLocation().Column()
 							cell := table.MakeCellFromBytes(message.Payload())
-							resp[2] = cell.DisplayValue()
+							resp[2] = cell.Value
+							resp[3] = cell.DisplayValue()
 							response["values"] = resp
 							err := c.write(response)
 							if err != nil {
@@ -69,11 +70,12 @@ func (c *connection) readPump() {
 				for row, _ := range vr.Values {
 					for column, _ := range vr.Values[row] {
 						value := vr.Values[row][column]
-						if value != ""{
-							cell := make([]interface{}, 3)
+						if value.Value != "" {
+							cell := make([]interface{}, 4)
 							cell[0], _ = strconv.Atoi(row)
 							cell[1], _ = strconv.Atoi(column)
-							cell[2] = value
+							cell[2] = value.Value
+							cell[3] = value.CellDisplayValue
 							values = append(values, cell)
 						}
 					}

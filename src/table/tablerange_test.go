@@ -1,14 +1,8 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/5/13
- * Time: 8:06 AM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 import (
 	"testing"
+	"time"
 )
 
 func TestMakeTableRange(t *testing.T) {
@@ -28,7 +22,7 @@ func TestMakeValueRange(t *testing.T) {
 	cell.CellDisplayValue = "test"
 	tbl[1][1] = cell
 	vr := MakeValueRange(tbl, MakeRange("A1:C3"))
-	if vr.Values["1"]["1"] != "test" {
+	if vr.Values["1"]["1"].CellDisplayValue != "test" {
 		t.Error("Value range was not made correctly.")
 	}
 }
@@ -46,12 +40,12 @@ func TestTurnStringKeyedToIntKeyed(t *testing.T) {
 
 func TestSumValueRange(t *testing.T) {
 	vr := new(valuerange)
-	vr.Values = make(map[string]map[string]string)
-	vr.Values["1"] = make(map[string]string)
-	vr.Values["2"] = make(map[string]string)
-	vr.Values["1"]["4"] = "5.5"
-	vr.Values["2"]["532"] = "7"
-	vr.Values["2"]["0"] = "test"
+	vr.Values = make(map[string]map[string]*cellValue)
+	vr.Values["1"] = make(map[string]*cellValue)
+	vr.Values["2"] = make(map[string]*cellValue)
+	vr.Values["1"]["4"] = makeCellValue("5.5", "5.5", time.Now())
+	vr.Values["2"]["532"] = makeCellValue("7", "7", time.Now())
+	vr.Values["2"]["0"] = makeCellValue("test", "test", time.Now())
 	if vr.Sum() != "12.5" {
 		t.Error("Valuerange not summing correctly.")
 	}

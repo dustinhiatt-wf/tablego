@@ -7,56 +7,15 @@ import (
 )
 
 type tablerange struct {
+	ISerializable
 	cells map[int]map[int]ICell
 }
 
-type valuerange struct {
-	ISerializable
-	Values 	map[string]map[string]string
-	mutex	sync.Mutex
-}
-
-func (vr *valuerange) update(row, column int, value string) {
-	strRow := strconv.Itoa(row)
-	strCol := strconv.Itoa(column)
-	vr.mutex.Lock()
-	_, ok := vr.Values[strRow]
-	if ok {
-		_, ok = vr.Values[strRow]
-		if ok {
-			vr.Values[strRow][strCol] = value
-		}
-	}
-	vr.mutex.Unlock()
-}
-
-func (vr *valuerange) Sum() string {
-	sum := 0.0
-	vr.mutex.Lock()
-	for row := range vr.Values {
-		for column := range vr.Values[row] {
-			value := vr.Values[row][column]
-			i, ok := strconv.ParseInt(value, 10, 64)
-			if ok == nil {
-				sum = sum + float64(i)
-				continue
-			}
-			f, ok := strconv.ParseFloat(value, 64)
-			if ok == nil {
-				sum = sum + f
-			}
-		}
-	}
-	vr.mutex.Unlock()
-	return strconv.FormatFloat(sum, 'f', -1, 64)
-}
-
-func (vr *valuerange) ToBytes() []byte {
-	res, err := json.Marshal(vr)
+func (tr *tablerange) ToBytes() []byte {
+	res, err := json.Marshal(tr)
 	if err != nil {
 		return nil
 	}
-
 	return res
 }
 
@@ -79,20 +38,76 @@ func MakeTableRange(cells map[int]map[int]ICell, cr *cellrange) *tablerange {
 	return tb
 }
 
+func MakeTableRangeFromBytes(bytes []byte) *tablerange {
+	var m tablerange
+	json.Unmarshal(bytes, &m)
+	return &m
+}
+
+type valuerange struct {
+	ISerializable
+	Values 	map[string]map[string]*cellValue
+	mutex	sync.Mutex
+}
+
+func (vr *valuerange) update(row, column int, cv *cellValue) {
+	strRow := strconv.Itoa(row)
+	strCol := strconv.Itoa(column)
+	vr.mutex.Lock()
+	_, ok := vr.Values[strRow]
+	if ok {
+		_, ok = vr.Values[strRow]
+		if ok {
+			vr.Values[strRow][strCol] = cv
+		}
+	}
+	vr.mutex.Unlock()
+}
+
+func (vr *valuerange) Sum() string {
+	sum := 0.0
+	vr.mutex.Lock()
+	for row := range vr.Values {
+		for column := range vr.Values[row] {
+			value := vr.Values[row][column]
+			i, ok := strconv.ParseInt(value.CellDisplayValue, 10, 64)
+			if ok == nil {
+				sum = sum + float64(i)
+				continue
+			}
+			f, ok := strconv.ParseFloat(value.CellDisplayValue, 64)
+			if ok == nil {
+				sum = sum + f
+			}
+		}
+	}
+	vr.mutex.Unlock()
+	return strconv.FormatFloat(sum, 'f', -1, 64)
+}
+
+func (vr *valuerange) ToBytes() []byte {
+	res, err := json.Marshal(vr)
+	if err != nil {
+		return nil
+	}
+
+	return res
+}
+
 func MakeValueRange(cells map[int]map[int]ICell, cr *cellrange) *valuerange {
 	vr := new(valuerange)
-	vr.Values = make(map[string]map[string]string)
+	vr.Values = make(map[string]map[string]*cellValue)
 	for i := cr.StartRow; i < cr.StopRow; i++ {
 		row, ok := cells[i]
 		if !ok {
 			continue
 		}
-		vr.Values[strconv.Itoa(i)] = make(map[string]string)
+		vr.Values[strconv.Itoa(i)] = make(map[string]*cellValue)
 		for j := cr.StartColumn; j < cr.StopColumn; j++ {
 			cell, ok := row[j]
 			if ok {
 
-				vr.Values[strconv.Itoa(i)][strconv.Itoa(j)] = cell.DisplayValue()
+				vr.Values[strconv.Itoa(i)][strconv.Itoa(j)] = cell.GetCellValue()
 			}
 		}
 	}

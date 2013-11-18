@@ -128,12 +128,12 @@ func TestParseFormulaIsNotAFormula(t *testing.T) {
 func TestCellSubscribesWhenFormulaSet(t *testing.T) {
 	chch := node.MakeIChild()
 	vr := new(valuerange)
-	vr.Values = make(map[string]map[string]string)
-	vr.Values["1"] = make(map[string]string)
-	vr.Values["2"] = make(map[string]string)
-	vr.Values["1"]["4"] = "5.5"
-	vr.Values["2"]["532"] = "7"
-	vr.Values["2"]["0"] = "test"
+	vr.Values = make(map[string]map[string]*cellValue)
+	vr.Values["1"] = make(map[string]*cellValue)
+	vr.Values["2"] = make(map[string]*cellValue)
+	vr.Values["1"]["4"] = makeCellValue("5.5", "5.5", time.Now())
+	vr.Values["2"]["532"] = makeCellValue("7", "7", time.Now())
+	vr.Values["2"]["0"] = makeCellValue("test", "test", time.Now())
 	var msg node.IMessage
 	go func () {
 		msg = <- chch.Channel().ChildToParent()

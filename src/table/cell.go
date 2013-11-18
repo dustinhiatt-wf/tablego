@@ -124,7 +124,7 @@ func (c *cell) OnMessageFromParent(msg node.IMessage) {
 		case CellUpdated:
 			loc, _ := msg.SourceCoordinates().(ITableCoordinates)
 			cell := MakeCellFromBytes(msg.Payload())
-			c.formulaValueRange.update(loc.CellLocation().Row(), loc.CellLocation().Column(), cell.DisplayValue())
+			c.formulaValueRange.update(loc.CellLocation().Row(), loc.CellLocation().Column(), cell.GetCellValue())
 			result := c.executeFormula()
 			c.LastUpdated = msg.Timestamp()
 			c.CellDisplayValue = result

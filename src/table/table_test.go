@@ -56,7 +56,7 @@ func TestGetValueRange(t *testing.T) {
 
 	vr := MakeValueRangeFromBytes(message.Payload())
 
-	if vr.Values["1"]["1"] != "test" {
+	if vr.Values["1"]["1"].CellDisplayValue != "test" {
 		t.Error("Value range not returned correctly.")
 	}
 }
@@ -96,7 +96,7 @@ func TestSubscribeToRange(t *testing.T) {
 	child.Channel().ParentToChild() <- node.MakeCommand(SubscribeToRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
 	msg := <-child.Channel().ChildToParent()
 	vr := MakeValueRangeFromBytes(msg.Payload())
-	if vr.Values["1"]["1"] != "test" {
+	if vr.Values["1"]["1"].CellDisplayValue != "test" {
 		t.Error("Value range not returned from subscribe correctly.")
 	}
 }
@@ -114,9 +114,9 @@ func TestSubscribeToRangeWithMultipleValues(t *testing.T) {
 	child.Channel().ParentToChild() <- node.MakeCommand(SubscribeToRange, MakeCoordinates("test", nil), MakeCoordinates("", nil), cr.ToBytes())
 	msg := <-child.Channel().ChildToParent()
 	vr := MakeValueRangeFromBytes(msg.Payload())
-	if vr.Values["1"]["1"] != "test" {
+	if vr.Values["1"]["1"].CellDisplayValue != "test" {
 		t.Error("Value range not returned correctly.")
-	} else if vr.Values["1"]["2"] != "test2" {
+	} else if vr.Values["1"]["2"].CellDisplayValue != "test2" {
 		t.Error("Value range not returned correctly.")
 	}
 }

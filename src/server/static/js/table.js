@@ -19,7 +19,7 @@ function updateCells(cells) {
 
 function updateCell(cell) {
     var table = document.getElementById('table');
-    table.rows[cell[0]].cells[cell[1]].innerText = cell[2];
+    table.rows[cell[0]].cells[cell[1]].innerText = cell[3];
 }
 
 function saveValue(row, column, value) {
