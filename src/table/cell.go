@@ -6,6 +6,7 @@ import (
 	"strings"
 	"reflect"
 	"time"
+	"strconv"
 )
 
 type ICell interface {
@@ -213,6 +214,33 @@ func (c *cell) sum(parts []string) string {
 	return c.formulaValueRange.Sum()
 }
 
+func (c *cell) vlookup(parts[] string) string {
+	lookup := parts[0]
+	cr := MakeRange(parts[1])
+	loc, _ := c.INode.Coordinates().(ITableCoordinates)
+	if cr.TableId == "" {
+		cr.TableId = loc.TableId()
+	}
+
+	if !reflect.DeepEqual(cr, c.formulaRange) {
+		c.unsubscribeCellRange()
+		c.formulaRange = cr
+		cmd := node.MakeCommand(SubscribeToRange, MakeCoordinates(cr.TableId, nil), c.INode.Coordinates(), cr.ToBytes())
+		ch := node.MakeMessageChannel()
+		msg := makeAddToPendingRequestMessage(cmd.MessageId(), ch)
+		c.requestChannel <- msg
+		<- msg.returnChannel // waiting channel added
+		go c.INode.Send(c.INode.Parent().ChildToParent(), cmd)
+		resp := <- ch // we got our value range
+
+		vr := MakeValueRangeFromBytes(resp.Payload())
+		c.formulaValueRange = vr
+	}
+
+	index, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+	return c.formulaValueRange.Vlookup(lookup, index, c.formulaRange)
+}
+
 func (c *cell) executeFormula() string {
 	if !strings.HasPrefix(c.Value, "=") {
 		return ""
@@ -222,6 +250,11 @@ func (c *cell) executeFormula() string {
 	switch strings.ToLower(parts[0]) {
 	case "sum":
 		return c.formulaValueRange.Sum()
+	case "vlookup":
+		parts = strings.Split(parts[1], ",")
+		index, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+		result := c.formulaValueRange.Vlookup(parts[0], index, c.formulaRange)
+		return result
 	default:
 		return ""
 	}
@@ -238,6 +271,9 @@ func (c *cell) parseValue(value string) string {
 	switch strings.ToLower(parts[0]) {
 	case "sum":
 		result = c.sum(parts[1:])
+	case "vlookup":
+		parts = strings.Split(parts[1], ",")
+		result = c.vlookup(parts)
 	}
 
 	return result

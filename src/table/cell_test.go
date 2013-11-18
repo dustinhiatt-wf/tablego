@@ -146,3 +146,10 @@ func TestCellSubscribesWhenFormulaSet(t *testing.T) {
 		t.Error("Cell did not subscribe to range of interest.")
 	}
 }
+
+func TestParseVlookup(t *testing.T) {
+	chch := node.MakeIChild()
+	c := MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+	c.parseValue("=vlookup(2, A1:B3, 1)")
+}

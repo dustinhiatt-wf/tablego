@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"sync"
+	"strings"
 )
 
 type tablerange struct {
@@ -83,6 +84,31 @@ func (vr *valuerange) Sum() string {
 	}
 	vr.mutex.Unlock()
 	return strconv.FormatFloat(sum, 'f', -1, 64)
+}
+
+func (vr *valuerange) Vlookup(value string, index int, cellRange *cellrange) string {
+	value = strings.TrimSpace(value)
+	lookupColumn := strconv.Itoa(cellRange.StartColumn)
+	for i := cellRange.StartRow; i < cellRange.StopRow; i++ {
+		lookupRow := strconv.Itoa(i)
+		_, ok := vr.Values[lookupRow]
+		if ok {
+			_, ok = vr.Values[lookupRow][lookupColumn]
+			if ok {
+				lookupValue := vr.Values[lookupRow][lookupColumn]
+				if lookupValue.CellDisplayValue == value {
+					indexColumn := strconv.Itoa(cellRange.StartColumn + index)
+					_, ok = vr.Values[lookupRow][indexColumn]
+					if ok {
+						return vr.Values[lookupRow][indexColumn].CellDisplayValue
+					} else {
+						return ""
+					}
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func (vr *valuerange) ToBytes() []byte {

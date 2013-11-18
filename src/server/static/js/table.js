@@ -1,6 +1,7 @@
 var ws;
-var numRows = 1000;
-var tables = ['table1', 'table2'];
+var numRows = 500;
+var tables = ['table1', 'table2', 'table3', 'table4', 'table5'];
+var initializedTables = [];
 
 function setModal(visible) {
     var modal = $('#dialog-modal');
@@ -26,8 +27,6 @@ function updateCell(cell) {
 }
 
 function saveValue(tableId, row, column, value) {
-    console.log("TABLEID");
-    console.log(tableId);
     sendMessage({
         'row': row,
         'column': column,
@@ -48,11 +47,7 @@ function sendMessage(msg, displayModal) {
 
 $(document).ready(function (){
     //presentation
-    $("#tabs").tabs({
-        create: function (event, ui) {
-
-        }
-    });
+    $("#tabs").tabs();
 
     for (var i = 0; i < tables.length; i ++) {
         var tableId = tables[i];
@@ -106,9 +101,8 @@ $(document).ready(function (){
     var tds = $('td');
     tds.focus(function () {
         var td = $(this);
-        var value = td.attr('data-value');
+        var value = td.text();
         previousValue = value;
-        td.text(value);
     });
     tds.blur(function () {
         var td = $(this);
@@ -162,8 +156,7 @@ $(document).ready(function (){
             }));
         }
     };
-    var tableOneInitialized = false;
-    var tableTwoInitialized = false;
+
     ws.onmessage = function(e) {
         var result = jQuery.parseJSON(e.data);
 
@@ -174,13 +167,9 @@ $(document).ready(function (){
                     updateCell(result.values);
                     break;
                 case 'registered':
-                    if (result.table == 'table1') {
-                        tableOneInitialized = true;
-                    } else if (result.table == 'table2') {
-                        tableTwoInitialized = true;
-                    }
+                    initializedTables.push(result.table);
                     updateCells(result.values);
-                    if (tableOneInitialized && tableTwoInitialized) {
+                    if (tables.length == initializedTables.length) {
                         setModal(false);
                     }
                     break;

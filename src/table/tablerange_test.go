@@ -50,3 +50,25 @@ func TestSumValueRange(t *testing.T) {
 		t.Error("Valuerange not summing correctly.")
 	}
 }
+
+func TestVlookup(t *testing.T) {
+	vr := new(valuerange)
+	vr.Values = make(map[string]map[string]*cellValue)
+	vr.Values["2"] = make(map[string]*cellValue)
+	vr.Values["2"]["2"] = makeCellValue("1", "1", time.Now())
+	vr.Values["3"] = make(map[string]*cellValue)
+	vr.Values["3"]["2"] = makeCellValue("2", "2", time.Now())
+	vr.Values["5"] = make(map[string]*cellValue)
+	vr.Values["5"]["2"] = makeCellValue("4", "4", time.Now())
+	vr.Values["5"]["4"] = makeCellValue("test", "test", time.Now())
+
+	cr := new(cellrange)
+	cr.StartRow = 2
+	cr.StopRow = 6
+	cr.StartColumn = 2
+	cr.StopColumn = 5
+	result := vr.Vlookup("4", 2, cr)
+	if result != "test" {
+		t.Error("Error with vlookup.")
+	}
+}
