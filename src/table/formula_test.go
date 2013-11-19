@@ -12,31 +12,31 @@ import (
 )
 
 func TestMakeRangeWithTableId(t *testing.T) {
-	cr := MakeRange("test:A1:C3")
-	if cr.tableId != "test" {
+	cr := MakeRange("test!A1:C3")
+	if cr.TableId != "test" {
 		t.Error("Table Id not set correctly.")
-	} else if cr.startRow != 0 {
+	} else if cr.StartRow != 0 {
 		t.Error("Start row not set correclty.")
-	} else if cr.stopRow != 3 {
+	} else if cr.StopRow != 3 {
 		t.Error("Stop row not set correctly.")
-	} else if cr.startColumn != 0 {
+	} else if cr.StartColumn != 0 {
 		t.Error("Start column not set correctly.")
-	} else if cr.stopColumn != 3 {
+	} else if cr.StopColumn != 3 {
 		t.Error("Stop column not set correctly.")
 	}
 }
 
 func TestMakeRangeWithoutTableId(t *testing.T) {
 	cr := MakeRange("A1:C3")
-	if cr.tableId != "" {
+	if cr.TableId != "" {
 		t.Error("Table Id not set correctly.")
-	} else if cr.startRow != 0 {
+	} else if cr.StartRow != 0 {
 		t.Error("Start row not set correclty.")
-	} else if cr.stopRow != 3 {
+	} else if cr.StopRow != 3 {
 		t.Error("Stop row not set correctly.")
-	} else if cr.startColumn != 0 {
+	} else if cr.StartColumn != 0 {
 		t.Error("Start column not set correctly.")
-	} else if cr.stopColumn != 3 {
+	} else if cr.StopColumn != 3 {
 		t.Error("Stop column not set correctly.")
 	}
 }

@@ -1,64 +1,126 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/5/13
- * Time: 3:36 PM
- * To change this template use File | Settings | File Templates.
- */
 package table
+
+import (
+	"node"
+	"sync"
+)
 
 var master = MakeOrchestrator()
 
+/*
+For unit testing
+ */
+
+func resetMaster() {
+	master = MakeOrchestrator()
+}
+
 type orchestrator struct {
-	tables		[]*table
+	node.INode
+	node.INodeFactory
+	node.ICommunicationHandler
+	children          	map[string]node.IChild
+	collectionChannel 	chan *addToChildMessage
+	childMutex 			sync.Mutex
 }
 
-func appendTable(o *orchestrator, t *table) {
-	if o.IsTableLoaded(t.id) {
-		return
-	}
-	o.tables = append(o.tables, t)
+func (o *orchestrator) OnMessageFromParent(msg node.IMessage) {
+	panic("An orchestrator should't get a message from a parent.")
 }
 
-func removeTable(o *orchestrator, t *table) {
-	i := -1
-	for index, table := range o.tables {
-		if table.id == t.id {
-			i = index
+func (o *orchestrator) OnMessageFromChild(msg node.IMessage) {
+	if msg.GetType() == node.Response {
+		loc, _ := msg.SourceCoordinates().(ITableCoordinates)
+		child, _ := o.children[loc.TableId()]
+		go child.SendNotification(msg.MessageId(), msg, true)
+	} else if msg.GetType() == node.Command {
+		if msg.Operation() == CellUpdated {
+			loc := msg.SourceCoordinates().(ITableCoordinates)
+			child := o.GetChild(MakeCoordinates(loc.TableId(), nil))
+			child.SendNotification(CellUpdated, msg, false)
 		}
+	} else {
+		//TODO: log error
 	}
-	if i == -1 {
-		return
-	}
-	o.tables = append(o.tables[:i], o.tables[i+1:]...)
 }
 
-func (o *orchestrator) IsTableLoaded(id string) bool {
-	for _, table := range o.tables {
-		if table.id == id {
-			return true
-		}
-	}
-	return false
+func (o *orchestrator) IsMessageIntendedForParent(msg node.IMessage) bool {
+	return false // orchestrator doesn't have a parent
 }
 
-func (o *orchestrator) GetTableById(id string) *table {
-	var t *table = nil
-	for _, table := range o.tables {
-		if table.id == id {
-			t = table
-			break
-		}
+func (o *orchestrator) IsMessageIntendedForMe(msg node.IMessage) bool {
+	return msg.TargetCoordinates().(ITableCoordinates).TableId() == ""
+}
+
+func (o *orchestrator) sendCommand(msg node.IMessage, observer chan node.IMessage) {
+	go func () {
+		ch := node.MakeMessageChannel()
+		o.INode.GetOrCreateChild(ch, msg.TargetCoordinates())
+		<- ch
+		child := o.GetChild(msg.TargetCoordinates())
+		child.Subscribe(msg.MessageId(), observer)
+		go o.INode.Send(child.Channel().ParentToChild(), msg)
+	}()
+}
+
+func (o *orchestrator) subscribeToTableRange(cellRange *cellrange, values, observer chan node.IMessage) {
+	if cellRange.TableId == "" {
+		go func () {
+			observer <- nil
+			close(observer)
+		}()
 	}
-	if t == nil {
-		t = MakeTable(id, o)
-		appendTable(o, t)
+	go func () {
+		ch := node.MakeMessageChannel()
+		o.INode.GetOrCreateChild(ch, MakeCoordinates(cellRange.TableId, nil))
+		<-ch // table exists now
+		child := o.GetChild(MakeCoordinates(cellRange.TableId, nil))
+		cmd := node.MakeCommand(SubscribeToRange, MakeCoordinates(cellRange.TableId, nil), MakeCoordinates("", nil), cellRange.ToBytes())
+		child.Subscribe(CellUpdated, observer)
+		child.Subscribe(cmd.MessageId(), ch)
+		go o.INode.Send(child.Channel().ParentToChild(), cmd)
+		msg := <- ch
+		values <- msg
+	}()
+}
+
+func (o *orchestrator) GetChild(coords node.ICoordinates) node.IChild {
+	original, _ := coords.(ITableCoordinates)
+	o.childMutex.Lock()
+	child, ok := o.children[original.TableId()]
+	o.childMutex.Unlock()
+	if ok {
+		return child
 	}
-	return t
+	return nil
+}
+
+func (o *orchestrator) MakeChildNode(parentChannel node.IChild, childCoordinates node.ICoordinates) node.INode {
+	loc, _ := childCoordinates.(ITableCoordinates)
+	child := MakeTable(parentChannel.Channel(), MakeCoordinates(loc.TableId(), nil), o.INode.Coordinates())
+
+	o.childMutex.Lock()
+	o.children[loc.TableId()] = parentChannel
+	o.childMutex.Unlock()
+	return child
 }
 
 func MakeOrchestrator() *orchestrator {
 	o := new(orchestrator)
-	o.tables = make([]*table, 0)
+	o.children = make(map[string]node.IChild)
+	o.INode = node.MakeNode(nil, MakeCoordinates("", nil), nil, o, o)
+	o.INode.Initialize()
 	return o
+}
+
+func SubscribeToTableRange(cellRange *cellrange, values, observer chan node.IMessage) {
+	master.subscribeToTableRange(cellRange, values, observer)
+}
+
+func UpdateCellAtLocation(tableId string, row, column int, value string) {
+	cmd := node.MakeCommand(EditCellValue, MakeCoordinates(tableId, MakeCellLocation(row, column)), MakeCoordinates("", nil), MakeTableCommand(value).ToBytes())
+	ch := node.MakeMessageChannel()
+	master.sendCommand(cmd, ch)
+	<- ch
+	close(ch)
 }

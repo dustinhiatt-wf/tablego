@@ -1,175 +1,155 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/4/13
- * Time: 11:57 AM
- * To change this template use File | Settings | File Templates.
- */
 package table
+
 
 import (
 	"testing"
-	//"log"
+	"node"
+	"time"
 )
 
-func TestAsInt(t *testing.T) {
-	v := MakeCell(1, 1, "7", nil, nil)
-	value, success := v.AsInt()
-	if value != 7 || success != true {
-		t.Error("Value data does not equal int64 7")
-	}
-}
-
-func TestAsFloat(t *testing.T) {
-	v := MakeCell(1, 1, "7.1", nil, nil)
-	value, success := v.AsFloat()
-	if value != 7.1 || success != true {
-		t.Error("Value data does not equal float64 7.1")
-	}
-}
-
-func TestAsFloatConversionFailure(t *testing.T) {
-	v := MakeCell(1, 1, "a", nil, nil)
-	_, success := v.AsFloat()
-	if success != false {
-		t.Error("Conversion of 'a' to float succeeded.")
-	}
-}
-
-func TestAsIntConversionFailure(t *testing.T) {
-	v := MakeCell(1, 1, "a", nil, nil)
-	_, success := v.AsInt()
-	if success != false {
-		t.Error("Convert of 'a' to int succeeded.")
-	}
-}
-
-func TestCreateValue(t *testing.T) {
-	v := MakeCell(1, 1, "", nil, nil)
-	ticks := v.timestamp
-	if ticks == 0 {
-		t.Error("Ticks are zero")
-	}
-}
-
-func TestMakeCell(t *testing.T) {
-	cell := MakeCell(1, 1, "test", nil, nil)
-	if cell.row != 1 {
-		t.Error("Row not set correctly.")
-	} else if cell.column != 1 {
-		t.Error("Column not set correctly.")
-	} else if cell.value != "test" {
-		t.Error("Value not set correctly.")
-	}
-}
-
-func TestUpdateValue(t *testing.T) {
-	cell := MakeCell(1, 1, "test", nil, nil)
-	cell.SetValue("test2")
-	if cell.value != "test2" {
-		t.Error("Cell didn't update for channel message.")
-	}
-}
-
-func TestExcelLetterToIndex(t *testing.T) {
-	index := getNumberFromAlpha("a")
-	if index != 0 {
-		t.Error("Wrong number returned for alpha.")
-	}
-}
-
-func TestExcelLetterToIndexMultipleCharacters(t *testing.T) {
-	index := getNumberFromAlpha("aa")
-	if index != 26 {
-		t.Error("Wrong number returned for alpha.")
-	}
-}
-
-func TestParseFormula(t *testing.T) {
-	funcName := "=test(foo, bar)"
-	funcParts := parseFormula(funcName)
-	if funcParts[0] != "test" || funcParts[1] != "foo, bar" {
-		t.Error("Function not parsed correctly.")
-	}
-}
-
-func TestParseValueForFormula(t *testing.T) {
-	funcName := "=test(foo, bar)"
-	cell := MakeCell(1, 1, funcName, nil, nil)
-	parseValueForFormula(cell)
-	if cell.isFormula == false {
-		t.Error("IsFormula not marked correctly.")
-	}
-}
-
-func TestGetPartsFromAlphaNumeric(t *testing.T) {
-	alphaNumeric := "A1"
-	parts := getStringPartsFromAlphaNumeric(alphaNumeric)
-	if parts[0] != "A" || parts[1] != "1" {
-		t.Error("Alphanumeric not parsed correctly.")
-	}
-}
-
-func TestGetNumberFromAlphaNumeric(t *testing.T) {
-	alphaNumeric := "1"
-	parts := getStringPartsFromAlphaNumeric(alphaNumeric)
-	if len(parts) != 1 || parts[0] != "1" {
-		t.Error("Alphanumeric not parsed correctly.")
-	}
-}
-
-func TestGetLetterFromAlphaNumeric(t *testing.T) {
-	alphaNumeric := "A"
-	parts := getStringPartsFromAlphaNumeric(alphaNumeric)
-	if len(parts) != 1 || parts[0] != "A" {
-		t.Error("Alphanumeric not parsed correctly.")
-	}
-}
-
-func TestParseAlphaNumericParts(t *testing.T) {
-	parts := []string{"A", "1"}
-	row, column := parseAlphaNumericParts(parts)
-	if row != 0 || column != 0 {
-		t.Error("Alphanumeric parts not parsed correctly.")
-	}
-}
-
-func TestParseAlphaNumericPartsNumberOnly(t *testing.T) {
-	parts := []string{"1"}
-	row, column := parseAlphaNumericParts(parts)
-	if row != 0 || column != -1 {
-		t.Error("Alphanumeric parts not parsed correctly.")
-	}
-}
-
-func TestParseAlphaNumericPartsLetterOnly(t *testing.T) {
-	parts := []string{"A"}
-	row, column := parseAlphaNumericParts(parts)
-	if row != -1 || column != 0 {
-		t.Error("Alphanumeric parts not parsed correctly.")
-	}
-}
-
-func TestCreateRange(t *testing.T) {
-	cr := MakeRange("A1:A1")
-	if cr.startRow != 0 {
-		t.Error("Start row not set correctly.")
-	} else if cr.stopRow != 1 {
-		t.Error("Stop row not set correctly.")
-	} else if cr.startColumn != 0 {
-		t.Error("Start column not set correctly.")
-	} else if cr.stopColumn != 1 {
-		t.Error("Stop column not set correctly.")
-	}
-}
-
 func TestSubscribeToCell(t *testing.T) {
-	cell := MakeCell(1, 1, "1", nil, nil)
-	ch := MakeValueChannel()
-	cell.Subscribe(ch)
-	cell.SetValue("2")
-	message := <- ch
-	if message.cell.DisplayValue != "2" {
-		t.Error("Subscribe to cell not functioning properly.")
+	chch := node.MakeIChild()
+	MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+	chch.Channel().ParentToChild() <- node.MakeCommand(Subscribe, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), makeSubscribePayload("", -1, -1, false).ToBytes())
+	<- chch.Channel().ChildToParent() // subscribed
+	chch.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	var message node.IMessage
+	msg := <- chch.Channel().ChildToParent() // updated
+	if msg.Operation() == CellUpdated {
+		message = msg
 	}
+	msg = <- chch.Channel().ChildToParent() //subscribe message
+	if msg.Operation() == CellUpdated {
+		message = msg
+	}
+	if message.Operation() != CellUpdated {
+		t.Error("Updated message not received")
+	}
+	cell := MakeCellFromBytes(message.Payload())
+	if cell.DisplayValue() != "test" {
+		t.Error("Updated cell does not have correct value.")
+	}
+}
+
+func TestUnsubscribeToCell(t *testing.T) {
+	chch := node.MakeIChild()
+	MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+	chch.Channel().ParentToChild() <- node.MakeCommand(Subscribe, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), makeSubscribePayload("", -1, -1, false).ToBytes())
+	<- chch.Channel().ChildToParent() // subscribed
+	chch.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	<- chch.Channel().ChildToParent() // updated
+	<- chch.Channel().ChildToParent() // subscribed updated
+
+	chch.Channel().ParentToChild() <- node.MakeCommand(Unsubscribe, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), makeSubscribePayload("", -1, -1, false).ToBytes())
+	<- chch.Channel().ChildToParent() // unsubscribed
+	chch.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test2").ToBytes())
+	<- chch.Channel().ChildToParent() //updated
+
+	go func () {
+		<- chch.Channel().ChildToParent() //this shouldn't happen
+		t.Error("Subscribe update received.")
+	}()
+
+	time.Sleep(20 * time.Millisecond) // don't like this but don't have time for a better option
+}
+
+func TestDoesNotUpdateWithIdenticalValue(t *testing.T) {
+	chch := node.MakeIChild()
+	MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+	chch.Channel().ParentToChild() <- node.MakeCommand(Subscribe, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), makeSubscribePayload("", -1, -1, false).ToBytes())
+	<- chch.Channel().ChildToParent() // subscribed
+	chch.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	<- chch.Channel().ChildToParent() // updated
+	<- chch.Channel().ChildToParent() // subscribed updated
+
+	chch.Channel().ParentToChild() <- node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	<- chch.Channel().ChildToParent() //updated
+
+	go func () {
+		<- chch.Channel().ChildToParent() //this shouldn't happen
+		t.Error("Subscribe update received.")
+	}()
+
+	time.Sleep(20 * time.Millisecond) // don't like this but don't have time for a better option
+}
+
+func TestSerializationDeserializationOfCell(t *testing.T) {
+	chch := node.MakeIChild()
+	c := MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "test")
+	copy := MakeCellFromBytes(c.ToBytes())
+	if c.DisplayValue() != copy.DisplayValue() {
+		t.Error("Displayed values do not match.")
+	} else if c.Value != copy.Value {
+		t.Error("Values do not match.")
+	}
+}
+
+func TestUpdateCellWithStaleData(t *testing.T) {
+	chch := node.MakeIChild()
+	MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+	chch.Channel().ParentToChild() <- node.MakeCommand(Subscribe, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), makeSubscribePayload("", -1, -1, false).ToBytes())
+	<- chch.Channel().ChildToParent() // subscribed
+	cmdOld := node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test").ToBytes())
+	cmdNew := node.MakeCommand(EditCellValue, MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("", nil), MakeTableCommand("test2").ToBytes())
+	chch.Channel().ParentToChild() <- cmdNew
+	<- chch.Channel().ChildToParent()
+	<- chch.Channel().ChildToParent() // updated
+
+	chch.Channel().ParentToChild() <- cmdOld
+
+	msg := <- chch.Channel().ChildToParent()
+	if msg.GetType() != node.Error {
+		t.Error("Stale data did not throw error.")
+	}
+
+	go func() {
+		<- chch.Channel().ChildToParent()
+		t.Error("Notified on stale update.")
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestParseFormulaIsNotAFormula(t *testing.T) {
+	chch := node.MakeIChild()
+	c := MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+
+	c.parseValue("test")
+	if c.isFormula == true {
+		t.Error("Formula not parsed correctly.")
+	}
+}
+
+func TestCellSubscribesWhenFormulaSet(t *testing.T) {
+	chch := node.MakeIChild()
+	vr := new(valuerange)
+	vr.Values = make(map[string]map[string]*cellValue)
+	vr.Values["1"] = make(map[string]*cellValue)
+	vr.Values["2"] = make(map[string]*cellValue)
+	vr.Values["1"]["4"] = makeCellValue("5.5", "5.5", time.Now())
+	vr.Values["2"]["532"] = makeCellValue("7", "7", time.Now())
+	vr.Values["2"]["0"] = makeCellValue("test", "test", time.Now())
+	var msg node.IMessage
+	go func () {
+		msg = <- chch.Channel().ChildToParent()
+		chch.Channel().ParentToChild() <- node.MakeResponse(msg, vr.ToBytes())
+
+
+	}()
+	MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "=sum(A1:C3)")
+	if msg.Operation() != SubscribeToRange {
+		t.Error("Cell did not subscribe to range of interest.")
+	}
+}
+
+func TestParseVlookup(t *testing.T) {
+	chch := node.MakeIChild()
+	c := MakeCell(chch.Channel(), MakeCoordinates("test", MakeCellLocation(1, 1)), MakeCoordinates("test", nil), "")
+	<- chch.Channel().ChildToParent() //cell initialized
+	c.parseValue("=vlookup(2, A1:B3, 1)")
 }

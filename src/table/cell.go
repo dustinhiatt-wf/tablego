@@ -1,180 +1,296 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/4/13
- * Time: 9:31 AM
- * To change this template use File | Settings | File Templates.
- */
 package table
 
 import (
-	"strconv"
-	"time"
+	"encoding/json"
+	"node"
 	"strings"
-//	"log"
+	"reflect"
+	"time"
+	"strconv"
 )
 
-const letters string = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+type ICell interface {
+	DisplayValue() string
+	SetValue(value string, timestamp time.Time)
+	GetCellValue() *cellValue
+}
 
 type cell struct {
-	row					int
-	column				int
-	value				string
-	valuechannel		chan *valuemessage
-	timestamp			int
-	table				*table
-	isFormula			bool
-	DisplayValue		string
-	subscribers			*subscribers
-	observers			[]chan *valuemessage
+	ISerializable
+	ICell
+	node.INode
+	node.ICommunicationHandler
+	node.INodeFactory
+	CellDisplayValue 					string
+	Value            					string
+	LastUpdated      					time.Time
+	observers        					*observers
+	pendingRequests  					map[string]chan node.IMessage
+	isFormula		 					bool
+	formulaValueRange					*valuerange
+	formulaRange						*cellrange
+	requestChannel	  					chan *addToPendingRequestsMessage
 }
 
-func (c *cell) AsInt() (int64, bool) {
-	i, err := strconv.ParseInt(c.DisplayValue, 0, 64) // 64-bit, base implied from string
+type cellValue struct {
+	CellDisplayValue string
+	Value            string
+	LastUpdated      time.Time
+}
+
+func makeCellValue(cellDisplayValue, value string, lastUpdated time.Time) *cellValue {
+	cv := new(cellValue)
+	cv.CellDisplayValue = cellDisplayValue
+	cv.Value = value
+	cv.LastUpdated = lastUpdated
+	return cv
+}
+
+func (c *cell) GetCellValue() *cellValue {
+	return makeCellValue(c.DisplayValue(), c.Value, c.LastUpdated)
+}
+
+func (c *cell) ToBytes() []byte {
+	cv := c.GetCellValue()
+	res, err := json.Marshal(cv)
 	if err != nil {
-		return 0, false
+		return nil
 	}
-	return i, true
+
+	return res
 }
 
-
-func (c *cell) AsFloat() (float64, bool) {
-	f, err := strconv.ParseFloat(c.DisplayValue, 64) //64-bit parse
+func MakeCellFromBytes(bytes []byte) *cell {
+	var m cellValue
+	err := json.Unmarshal(bytes, &m)
 	if err != nil {
-		return 0, false
+		return nil
 	}
-	return f, true
-}
-
-
-func (c *cell) IsInt() bool {
-	_, success := c.AsInt()
-	return success
-}
-
-
-func (c *cell) IsFloat() bool {
-	_, success := c.AsFloat()
-	return success
-}
-
-func (c *cell) SetValue(value string) {
-	if c.value == value {
-		return
-	}
-	c.value = value
-	c.DisplayValue = value
-	if c.table != nil && c.table.isinitialized {
-		initialize(c)
-	}
-	if !c.isFormula {
-		go c.subscribers.notifySubscribers(&valuemessage{"updated", c})
-	}
-}
-
-func (c *cell) Subscribe(ch chan *valuemessage) {
-	c.subscribers.append(ch)
-}
-
-func initialize(c *cell) {
-	if c.value == "" {
-		return
-	}
-	parseValueForFormula(c)
-}
-
-func listen(c *cell, ch <- chan *valuemessage) {
-	for {
-		select {
-		case message := <- ch:
-			switch message.operation {
-			case "updated":
-				go calculate(c)
-			case "unsubscribe":
-				return
-			}
-		}
-	}
-}
-
-func subscribeToRange(c *cell, cr *cellrange) {
-	unsubscribeObservers(c)
-	for i := cr.startRow; i < cr.stopRow; i++ {
-		for j := cr.startColumn; j < cr.stopColumn; j++ {
-			ch := MakeValueChannel()
-			c.table.Subscribe(i, j, ch)
-			c.observers = append(c.observers, ch)
-			go listen(c, ch)
-		}
-	}
-}
-
-func unsubscribeObservers(c *cell) {
-	for _, ch := range c.observers {
-		ch <- &valuemessage{"unsubscribe", nil}
-		close(ch)
-	}
-	c.observers = make([]chan *valuemessage, 0)
-}
-
-func calculate(c *cell) *cellrange {
-	funcParts := parseFormula(c.value)
-	var cr *cellrange
-	value := ""
-	switch funcParts[0] {
-	case "sum":
-		cr, value = sum(c, funcParts[1])
-	}
-	if value != c.DisplayValue {
-		c.DisplayValue = value
-		go c.subscribers.notifySubscribers(&valuemessage{"updated", c})
-	}
-	return cr
-}
-
-func listenToTable(c *cell) {
-	for {
-		select {
-		case message := <- c.table.tablechannel:
-			switch message.operation {
-			case "initialized":
-				go initialize(c)
-			}
-		}
-	}
-}
-
-func parseValueForFormula(c *cell) {
-	if strings.HasPrefix(c.value, "=") {
-		c.isFormula = true
-		cr := calculate(c)
-		if cr != nil {
-			subscribeToRange(c, cr)
-		}
-	} else {
-		c.DisplayValue = c.value
-	}
-}
-
-func MakeCell(row int, column int, value string, table *table, listener chan *valuemessage) *cell {
+	cv := &m
 	cell := new(cell)
-	cell.valuechannel = MakeValueChannel()
-	cell.row = row
-	cell.column = column
-	cell.timestamp = time.Now().Nanosecond()
-	cell.table = table
-	cell.subscribers = MakeSubscribers()
-	if listener != nil {
-		cell.subscribers.append(listener)
-	}
-	cell.observers = make([]chan *valuemessage, 0)
-	cell.SetValue(value)
-	if table != nil {
-		go listenToTable(cell)
-		if table.isinitialized {
-			initialize(cell)
-		}
-	}
+	cell.CellDisplayValue = cv.CellDisplayValue
+	cell.Value = cv.Value
+	cell.LastUpdated = cv.LastUpdated
 	return cell
 }
 
+func (c *cell) DisplayValue() string {
+	return c.CellDisplayValue
+}
+
+func (c *cell) SetValue(value string, timestamp time.Time) {
+	if value == c.Value {
+		return
+	}
+	c.Value = value
+	c.LastUpdated = timestamp
+	c.CellDisplayValue = c.parseValue(value)
+	c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes(), c.INode.Coordinates())
+}
+
+func (c *cell) OnMessageFromParent(msg node.IMessage) {
+	if msg.GetType() == node.Response {
+		ch, ok := c.pendingRequests[msg.MessageId()]
+		if ok {
+			c.INode.Send(ch, msg)
+			delete(c.pendingRequests, msg.MessageId())
+			close(ch)
+		}
+	} else if msg.GetType() == node.Command {
+		switch msg.Operation() {
+		case GetCellValue:
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.INode.Send(c.INode.Parent().ChildToParent(), resp)
+		case EditCellValue:
+			if msg.Timestamp().Before(c.LastUpdated) {
+				err := node.MakeError(msg, nil)
+				go c.Send(c.INode.Parent().ChildToParent(), err)
+				return
+			}
+
+			tblCmd := MakeTableCommandFromJson(msg.Payload())
+			c.SetValue(tblCmd.Value, msg.Timestamp())
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.Send(c.INode.Parent().ChildToParent(), resp)
+		case Subscribe:
+			sp := makeSubscribePayloadFromBytes(msg.Payload())
+			c.Subscribe(sp)
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.Send(c.INode.Parent().ChildToParent(), resp)
+		case Unsubscribe:
+			sp := makeSubscribePayloadFromBytes(msg.Payload())
+			c.Unsubscribe(sp)
+			resp := node.MakeResponse(msg, c.ToBytes())
+			go c.Send(c.INode.Parent().ChildToParent(), resp)
+		case CellUpdated:
+			loc, _ := msg.SourceCoordinates().(ITableCoordinates)
+			cell := MakeCellFromBytes(msg.Payload())
+			c.formulaValueRange.update(loc.CellLocation().Row(), loc.CellLocation().Column(), cell.GetCellValue())
+			result := c.executeFormula()
+			c.LastUpdated = msg.Timestamp()
+			c.CellDisplayValue = result
+			c.observers.notifyObservers(CellUpdated, c.INode.Parent().ChildToParent(), c.ToBytes(), c.INode.Coordinates())
+		default:
+			resp := node.MakeResponse(msg, nil)
+			c.INode.Send(c.INode.Parent().ChildToParent(), resp)
+		}
+
+	} else {
+		//TODO: log error
+	}
+}
+
+func (c *cell) listenToRequests(ch chan *addToPendingRequestsMessage) {
+	ch <- nil
+	for {
+		select {
+		case message := <-ch:
+			if message.channel == nil {
+				channel, ok := c.pendingRequests[message.id]
+				if !ok {
+					message.returnChannel <- nil
+					continue
+				}
+				message.returnChannel <- channel
+			} else {
+				c.pendingRequests[message.id] = message.channel
+				message.returnChannel <- message.channel
+			}
+		}
+	}
+}
+
+func (c *cell) OnMessageFromChild(msg node.IMessage) {
+	panic("Cells should not receive messages from children")
+}
+
+func (c *cell) GetChild(coords node.ICoordinates) node.IChild {
+	//TODO: so we can handle embedded formulas, they should be children
+	panic("Cells have no children currently.")
+}
+
+func (c *cell) makeChildNode(parentChannel node.IChild, childCoordinates node.ICoordinates) node.INode {
+	panic("Cells can't create children.")
+}
+
+func (c *cell) Subscribe(sp *subscribePayload) {
+	c.observers.addObserver(sp)
+}
+
+func (c *cell) Unsubscribe(sp *subscribePayload) {
+	c.observers.removeObserver(sp)
+}
+
+func (c *cell) unsubscribeCellRange() {
+	if c.formulaRange == nil {
+		return
+	}
+
+	cmd := node.MakeCommand(UnsubscribeToRange, MakeCoordinates(c.formulaRange.TableId, nil), c.INode.Coordinates(), c.formulaRange.ToBytes())
+	go c.INode.Send(c.INode.Parent().ChildToParent(), cmd)
+}
+
+func (c *cell) sum(parts []string) string {
+	cr := MakeRange(parts[0])
+	loc, _ := c.INode.Coordinates().(ITableCoordinates)
+	if cr.TableId == "" {
+		cr.TableId = loc.TableId()
+	}
+	if !reflect.DeepEqual(cr, c.formulaRange) {
+		c.unsubscribeCellRange()
+		c.formulaRange = cr
+		cmd := node.MakeCommand(SubscribeToRange, MakeCoordinates(cr.TableId, nil), c.INode.Coordinates(), cr.ToBytes())
+		ch := node.MakeMessageChannel()
+		msg := makeAddToPendingRequestMessage(cmd.MessageId(), ch)
+		c.requestChannel <- msg
+		<- msg.returnChannel // waiting channel added
+		go c.INode.Send(c.INode.Parent().ChildToParent(), cmd)
+		resp := <- ch // we got our value range
+
+		vr := MakeValueRangeFromBytes(resp.Payload())
+		c.formulaValueRange = vr
+	}
+
+	return c.formulaValueRange.Sum()
+}
+
+func (c *cell) vlookup(parts[] string) string {
+	lookup := parts[0]
+	cr := MakeRange(parts[1])
+	loc, _ := c.INode.Coordinates().(ITableCoordinates)
+	if cr.TableId == "" {
+		cr.TableId = loc.TableId()
+	}
+
+	if !reflect.DeepEqual(cr, c.formulaRange) {
+		c.unsubscribeCellRange()
+		c.formulaRange = cr
+		cmd := node.MakeCommand(SubscribeToRange, MakeCoordinates(cr.TableId, nil), c.INode.Coordinates(), cr.ToBytes())
+		ch := node.MakeMessageChannel()
+		msg := makeAddToPendingRequestMessage(cmd.MessageId(), ch)
+		c.requestChannel <- msg
+		<- msg.returnChannel // waiting channel added
+		go c.INode.Send(c.INode.Parent().ChildToParent(), cmd)
+		resp := <- ch // we got our value range
+
+		vr := MakeValueRangeFromBytes(resp.Payload())
+		c.formulaValueRange = vr
+	}
+
+	index, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+	return c.formulaValueRange.Vlookup(lookup, index, c.formulaRange)
+}
+
+func (c *cell) executeFormula() string {
+	if !strings.HasPrefix(c.Value, "=") {
+		return ""
+	}
+
+	parts := parseFormula(c.Value)
+	switch strings.ToLower(parts[0]) {
+	case "sum":
+		return c.formulaValueRange.Sum()
+	case "vlookup":
+		parts = strings.Split(parts[1], ",")
+		index, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+		result := c.formulaValueRange.Vlookup(parts[0], index, c.formulaRange)
+		return result
+	default:
+		return ""
+	}
+}
+
+func (c *cell) parseValue(value string) string {
+	if !strings.HasPrefix(value, "=") {
+		c.isFormula = false
+		return value
+	}
+	parts := parseFormula(value)
+	c.isFormula = true
+	result := value
+	switch strings.ToLower(parts[0]) {
+	case "sum":
+		result = c.sum(parts[1:])
+	case "vlookup":
+		parts = strings.Split(parts[1], ",")
+		result = c.vlookup(parts)
+	}
+
+	return result
+}
+
+func MakeCell(parentChannel node.IChannel, coordinates, parentCoordinates node.ICoordinates, value string) *cell {
+	cell := new(cell)
+	cell.Value = value
+	cell.observers = MakeObservers()
+	cell.pendingRequests = make(map[string]chan node.IMessage)
+	cell.INode = node.MakeNode(parentChannel, coordinates, parentCoordinates, cell, cell)
+
+	reqCh := make(chan *addToPendingRequestsMessage)
+	cell.requestChannel = reqCh
+	go cell.listenToRequests(cell.requestChannel)
+	<-cell.requestChannel
+	cell.CellDisplayValue = cell.parseValue(value)
+	cell.INode.Initialize()
+	return cell
+}

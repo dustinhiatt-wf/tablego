@@ -1,17 +1,16 @@
-/**
- * Created with IntelliJ IDEA.
- * User: dustinhiatt
- * Date: 11/4/13
- * Time: 8:47 AM
- * To change this template use File | Settings | File Templates.
- */
 package main
 
 import (
-	"fmt"
-	"table"
+        "log"
+        "net/http"
+		"server"
 )
 
 func main() {
-	fmt.Printf(table.ReturnHello())
+		http.Handle("/", http.FileServer(http.Dir("./server/static")))
+        http.HandleFunc("/ws", server.ServeWs)
+        err := http.ListenAndServe(":8123", nil)
+        if err != nil {
+                log.Fatal("ListenAndServe: ", err)
+        }
 }

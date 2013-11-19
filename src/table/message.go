@@ -7,19 +7,110 @@
  */
 package table
 
-type valuemessage struct {
-	operation 	string
-	cell		*cell
+import (
+	"node"
+)
+
+type ISerializable interface {
+	ToBytes() []byte
 }
 
-type tablemessage struct {
-	operation	string
+type ITableCoordinates interface {
+	node.ICoordinates
+	TableId() string
+	CellLocation() ICellLocation
 }
 
-func MakeValueChannel() chan *valuemessage {
-	return make(chan *valuemessage)
+type coordinates struct {
+	ITableCoordinates
+	tableId      string
+	cellLocation ICellLocation
 }
 
-func MakeTableChannel() chan *tablemessage {
-	return make(chan *tablemessage, 1)
+func (c *coordinates) Equal(other node.ICoordinates) bool {
+	o := other.(ITableCoordinates)
+	if c.cellLocation == nil && o.CellLocation() != nil {
+		return false
+	} else if c.cellLocation == nil && o.CellLocation() == nil {
+		return c.tableId == o.TableId()
+	}
+	return c.tableId == o.TableId() && c.cellLocation.Equal(o.CellLocation())
+}
+
+func (c *coordinates) CellLocation() ICellLocation {
+	return c.cellLocation
+}
+
+func (c *coordinates) TableId() string {
+	return c.tableId
+}
+
+type ICellLocation interface {
+	Row() int
+	Column() int
+	Equal(other ICellLocation) bool
+}
+
+type cellLocation struct {
+	cellRow    int
+	cellColumn int
+}
+
+func (cl *cellLocation) Equal(other ICellLocation) bool {
+	if other == nil {
+		return false
+	}
+	return cl.cellRow == other.Row() && cl.cellColumn == other.Column()
+}
+
+func (cl *cellLocation) Row() int {
+	return cl.cellRow
+}
+
+func (cl *cellLocation) Column() int {
+	return cl.cellColumn
+}
+
+func MakeCellLocation(row, column int) ICellLocation {
+	cl := &cellLocation{row, column}
+	return cl
+}
+
+func MakeCoordinates(tableId string, cellLocation ICellLocation) node.ICoordinates {
+	c := new(coordinates)
+	c.tableId = tableId
+	c.cellLocation = cellLocation
+	return c
+}
+
+type addToChildMessage struct {
+	row           int
+	column        int
+	tableId       string
+	child         node.IChild
+	returnChannel chan node.IChild
+}
+
+func makeAddToChildMessage(row, column int, tableId string, child node.IChild) *addToChildMessage {
+	atcm := new(addToChildMessage)
+	atcm.row = row
+	atcm.column = column
+	atcm.child = child
+	atcm.tableId = tableId
+	atcm.returnChannel = make(chan node.IChild)
+	return atcm
+}
+
+type addToPendingRequestsMessage struct {
+	id				string
+	channel 		chan node.IMessage
+	returnChannel 	chan chan node.IMessage
+}
+
+func makeAddToPendingRequestMessage(id string, channel chan node.IMessage) *addToPendingRequestsMessage {
+	msg := new(addToPendingRequestsMessage)
+	msg.id = id
+	msg.channel = channel
+	msg.returnChannel = make(chan chan node.IMessage)
+	return msg
 }
